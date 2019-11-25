@@ -15,6 +15,11 @@ conda config --set auto_activate_base false
 conda config --add channels conda-forge
 
 conda create --name analysisenv uproot matplotlib pandas jupyter numba -y
+
+# activate environment and install some packages once
+conda activate analysisenv
+pip install git+git://github.com/aminnj/yahist.git#egg=yahist -U
+pip install tqdm coffea
 ```
 
 Start analysis jupyter notebook:

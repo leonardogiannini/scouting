@@ -209,26 +209,30 @@ class Looper(object):
 
         make_branch("MET_pt", "f")
         make_branch("MET_phi", "f")
+        make_branch("MET_pt_muonCorr", "f")
+        make_branch("MET_phi_muonCorr", "f")
         make_branch("rho", "f")
         make_branch("LeadingPair_mass", "f")
         make_branch("LeadingPair_sameVtx", "b")
         make_branch("LeadingPair_isOS", "b")
 
         make_branch("nDV", "i")
+        make_branch("nDV_good", "i")
         make_branch("DV_x","vf")
         make_branch("DV_y","vf")
         make_branch("DV_z","vf")
         make_branch("DV_xError","vf")
         make_branch("DV_yError","vf")
         make_branch("DV_zError","vf")
-        make_branch("DV_tracksSize","vf")
+        make_branch("DV_tracksSize","vi")
         make_branch("DV_chi2","vf")
-        make_branch("DV_ndof","vf")
-        make_branch("DV_isValidVtx","vf")
+        make_branch("DV_ndof","vi")
+        make_branch("DV_isValidVtx","vb")
+        make_branch("DV_good","vb")
         make_branch("DV_rho", "vf")
         make_branch("DV_rhoCorr", "vf")
         make_branch("DV_inPixelRectangles", "vb")
-        make_branch("DV_inPixelRectanglesRough", "vb")
+        # make_branch("DV_inPixelRectanglesRough", "vb")
 
         if self.do_jets:
             make_branch("nJet", "i")
@@ -281,6 +285,7 @@ class Looper(object):
             make_branch("Track_dz", "vf")
 
         make_branch("nMuon", "i")
+        make_branch("nMuon_good", "i")
         make_branch("Muon_pt", "vf")
         make_branch("Muon_eta", "vf")
         make_branch("Muon_phi", "vf")
@@ -317,6 +322,8 @@ class Looper(object):
         make_branch("Muon_nExpectedPixelHits", "vi")
         make_branch("Muon_jetIdx1", "vi")
         make_branch("Muon_jetIdx2", "vi")
+        make_branch("Muon_drjet", "vf")
+        make_branch("Muon_good", "vb")
 
         make_branch("nGenPart", "i")
         make_branch("GenPart_pt", "vf")
@@ -347,7 +354,7 @@ class Looper(object):
         make_branch("BS_z", "f")
 
 
-        self.outtree.SetBasketSize("*",int(256*1024))
+        self.outtree.SetBasketSize("*",int(512*1024))
 
     def run(self):
 
@@ -428,8 +435,10 @@ class Looper(object):
             branches["luminosityBlock"][0] = lumi
             branches["event"][0] = eventnum
 
-            branches["MET_pt"][0] = evt.double_hltScoutingCaloPacker_caloMetPt_HLT.product()[0]
-            branches["MET_phi"][0] = evt.double_hltScoutingCaloPacker_caloMetPhi_HLT.product()[0]
+            metpt = evt.double_hltScoutingCaloPacker_caloMetPt_HLT.product()[0]
+            metphi = evt.double_hltScoutingCaloPacker_caloMetPhi_HLT.product()[0]
+            branches["MET_pt"][0] = metpt
+            branches["MET_phi"][0] = metphi
             branches["rho"][0] = evt.double_hltScoutingCaloPacker_rho_HLT.product()[0]
 
             bsx,bsy,bsz = self.get_bs(run=run,lumi=lumi,year=2018)
@@ -437,6 +446,7 @@ class Looper(object):
             branches["BS_y"][0] = bsy
             branches["BS_z"][0] = bsz
 
+            ngooddv = 0
             for dv in dvs:
                 vx = dv.x()
                 vy = dv.y()
@@ -456,17 +466,25 @@ class Looper(object):
                 branches["DV_rho"].push_back(rho)
                 branches["DV_rhoCorr"].push_back(rhoCorr)
                 branches["DV_inPixelRectangles"].push_back(self.in_pixel_rectangles(vx,vy,vz))
-                branches["DV_inPixelRectanglesRough"].push_back(self.in_pixel_rectangles_rough(vx,vy,vz))
+                # branches["DV_inPixelRectanglesRough"].push_back(self.in_pixel_rectangles_rough(vx,vy,vz))
+                gooddv = ((dv.xError() < 0.05) and (dv.yError() < 0.05) and (dv.zError() < 0.10))
+                branches["DV_good"].push_back(gooddv)
+                ngooddv += gooddv
             branches["nDV"][0] = len(dvs)
+            branches["nDV_good"][0] = ngooddv
 
-            for pv in pvs:
-                branches["PV_x"].push_back(pv.x())
-                branches["PV_y"].push_back(pv.y())
-                branches["PV_z"].push_back(pv.z())
-                branches["PV_tracksSize"].push_back(pv.tracksSize())
-                branches["PV_chi2"].push_back(pv.chi2())
-                branches["PV_ndof"].push_back(pv.ndof())
-                branches["PV_isValidVtx"].push_back(pv.isValidVtx())
+            # I think these only get calculated/written out when mass>10gev (event also fell into PFscouting stream)
+            # so most of the pv collections are size 0.
+            # However, PVM below is the set of PVs with an associated muon. That always has at least one entry.
+            # We'll store the full PVM stuff, but just the multiplicity of PV for now (PU reweighting if mass>10?). Cuts down on filesize.
+            # for pv in pvs:
+            #     branches["PV_x"].push_back(pv.x())
+            #     branches["PV_y"].push_back(pv.y())
+            #     branches["PV_z"].push_back(pv.z())
+            #     branches["PV_tracksSize"].push_back(pv.tracksSize())
+            #     branches["PV_chi2"].push_back(pv.chi2())
+            #     branches["PV_ndof"].push_back(pv.ndof())
+            #     branches["PV_isValidVtx"].push_back(pv.isValidVtx())
             branches["nPV"][0] = len(pvs)
 
             for pvm in pvms:
@@ -481,11 +499,7 @@ class Looper(object):
 
             if self.do_jets:
                 jets = evt.ScoutingCaloJets_hltScoutingCaloPacker__HLT.product()
-                # before = ",".join(["{:.1f}".format(jet.pt()) for jet in jets])
                 jets = sorted(jets, key=lambda x:-x.pt())
-                # after = ",".join(["{:.1f}".format(jet.pt()) for jet in jets])
-                # print("before:",before)
-                # print("after: ",after)
                 jet_etaphis = []
                 for jet in jets:
                     branches["Jet_pt"].push_back(jet.pt())
@@ -572,6 +586,9 @@ class Looper(object):
                     branches["Track_nTrackerLayersWithMeasurement"].push_back(track.tk_nTrackerLayersWithMeasurement())
                     branches["Track_nValidStripHits"].push_back(track.tk_nValidStripHits())
 
+            metx_muoncorr = metpt*math.cos(metphi)
+            mety_muoncorr = metpt*math.sin(metphi)
+            ngoodmuon = 0
             for muon in muons:
                 pt = muon.pt()
                 eta = muon.eta()
@@ -606,14 +623,21 @@ class Looper(object):
 
                 jetIdx1 = -1
                 jetIdx2 = -1
+                drjet = -1
                 if self.do_jets:
-                    # find index of jet that is closest to this muon
-                    sorted_etaphis = sorted(zip(range(len(jet_etaphis)), jet_etaphis), key=lambda x: math.hypot(eta-x[1][0], phi-x[1][1]))
+                    # find index of jet that is closest to this muon. `sorted_etaphis`: [(index, (eta,phi)), ...]
+                    sorted_etaphis = sorted(enumerate(jet_etaphis), key=lambda x: math.hypot(eta-x[1][0], phi-x[1][1]))
                     if len(sorted_etaphis) > 0: jetIdx1 = sorted_etaphis[0][0]
                     if len(sorted_etaphis) > 1: jetIdx2 = sorted_etaphis[1][0]
+                    if jetIdx1 >= 0:
+                        jeteta, jetphi = sorted_etaphis[0][1]
+                        drjet = math.hypot(eta-jeteta,phi-jetphi)
+                branches["Muon_drjet"].push_back(drjet)
                 branches["Muon_jetIdx1"].push_back(jetIdx1)
                 branches["Muon_jetIdx2"].push_back(jetIdx2)
 
+                metx_muoncorr -= pt*math.cos(phi)
+                mety_muoncorr -= pt*math.sin(phi)
 
                 indices = muon.vtxIndx()
                 num = len(indices)
@@ -647,7 +671,23 @@ class Looper(object):
                 vmu = r.TLorentzVector()
                 vmu.SetPtEtaPhiM(muon.pt(), muon.eta(), muon.phi(), 0.10566)
                 branches["Muon_nExpectedPixelHits"].push_back(self.calculate_module_crosses(vx,vy,vz,vmu.Px(),vmu.Py(),vmu.Pz()))
+
+                goodmuon = (
+                        (muon.trackIso() < 0.1) and
+                        (muon.chi2()/muon.ndof() < 3.0) and
+                        (muon.nValidMuonHits() > 0) and
+                        ((drjet < 0) or (drjet > 0.3))
+                        )
+                ngoodmuon += goodmuon
+                branches["Muon_good"].push_back(goodmuon)
             branches["nMuon"][0] = len(muons)
+            branches["nMuon_good"][0] = ngoodmuon
+
+            metpt_muoncorr = math.hypot(metx_muoncorr, mety_muoncorr)
+            metphi_muoncorr = math.atan2(mety_muoncorr, metx_muoncorr)
+            branches["MET_pt_muonCorr"][0] = metpt_muoncorr
+            branches["MET_phi_muonCorr"][0] = metphi_muoncorr
+
 
 
             if len(muons) >= 2:

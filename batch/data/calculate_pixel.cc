@@ -5,7 +5,6 @@
 #include "pixel_module_faces_2018.h"
 #include "pixel_module_volumes_2018.h"
 
-
 bool is_point_in_one_module(float px, float py, float pz, float arr[]) {
     float sx = px - arr[9];
     float sy = py - arr[10];
@@ -22,6 +21,34 @@ bool is_point_in_any_module(float px, float py, float pz) {
     }
     return false;
 }
+
+// float distance_point_one_module(float px, float py, float pz, float arr[]) {
+//     // Computes 3d distance from a point to the center of a given module
+//     // If the distance is NEGATIVE, the point IS CONTAINED in the module
+//     float sx = px - arr[9];
+//     float sy = py - arr[10];
+//     float sz = pz - arr[11];
+//     float dx = arr[3*0]*sx + arr[3*0+1]*sy + arr[3*0+2]*sz;
+//     float dy = arr[3*1]*sx + arr[3*1+1]*sy + arr[3*1+2]*sz;
+//     float dz = arr[3*2]*sx + arr[3*2+1]*sy + arr[3*2+2]*sz;
+//     float dist3d = pow(dx*dx + dy*dy + dz*dz, 0.5);
+//     dist3d *= -1;
+//     if ((fabs(dx) > arr[0+12]) or (fabs(dx) > arr[0+12]) or (fabs(dx) > arr[0+12])) dist3d *= -1;
+//     return dist3d;
+// }
+
+// float distance_point_any_module(float px, float py, float pz) {
+//     // Returns the smallest 3d distance from a point to the center of any module
+//     // If the distance is NEGATIVE, then the point IS CONTAINED in a module
+//     float smallest = 999.;
+//     for (unsigned int imodule = 0; imodule < NMODULES; imodule++) {
+//         float dist = distance_point_one_module(px, py, pz, module_volumes[imodule]);
+//         if (dist < smallest) smallest = dist;
+//         // If the point is in this module, no need to check more.
+//         if (smallest < 0.) return smallest;
+//     }
+//     return smallest;
+// }
 
 bool is_ray_inside_face(const TVector3 v[], TVector3 rayorig, TVector3 raydir) {
     auto raydirunit = raydir.Unit();

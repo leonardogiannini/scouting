@@ -187,6 +187,10 @@ def get_geometry_df(fname):
     df["translation_z"] = df["translation"].str[2]
     df["translation_rho"] = np.hypot(df["translation_x"],df["translation_y"])
     df = df[df["shape"].apply(lambda x:x[0])==2.]
+    df["endcap"] = df.eval("abs(translation_z)>25")
+    # layer 1-4 for barrel, 5,7,8 for z disks
+    df["layer"] = df.eval("0+(translation_rho>0)+(translation_rho>9)+(translation_rho>14)"
+                            "+3*(abs(translation_z)>25)+(abs(translation_z)>35)+(abs(translation_z)>45)").astype(int)
     df = df.query("translation_rho<18") # 4 pixel layers
     return df
 
@@ -220,6 +224,39 @@ def plot_overlay_bpix(ax,**kwargs):
         points = points[np.array([6,2,1,5,6])]
         ax.plot(points[:,0],points[:,1],color=color,**kwargs)
     return ax
+
+@pd.api.extensions.register_dataframe_accessor("tree")
+class TreeLikeAccessor:
+    def __init__(self, pandas_obj):
+        self._obj = pandas_obj
+
+    def draw(self, varexp, sel, bins=None):
+        try:
+            from yahist import Hist1D
+        except:
+            raise Exception("Need Hist1D object from the yahist package")
+
+        df = self._obj
+
+        weights = df.eval(sel)
+        mask = np.zeros(len(df), dtype=bool)
+        extra = dict()
+        if (weights.dtype in [int, np.int32]):
+            mask = weights != 0
+            extra["weights"] = weights[mask]
+        if (weights.dtype == bool):
+            mask = weights > 0.5
+            # no weights for bools
+        if (weights.dtype == float):
+            mask = weights != 0.
+            extra["weights"] = weights[mask]
+        vals = df[mask].eval(varexp)
+        if bins is not None:
+            if type(bins) in [str]:
+                raise NotImplementedError()
+            else:
+                extra["bins"] = bins
+        return Hist1D(vals, **extra)
 
 @pd.api.extensions.register_dataframe_accessor("vec")
 class LorentzVectorAccessor:

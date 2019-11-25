@@ -28,7 +28,7 @@ def get_data_tasks(info):
                 output_name = "output.root",
                 executable = "executables/scouting_exe.sh",
                 tarfile = "package.tar.gz",
-                MB_per_output = 4000,
+                MB_per_output = (1000 if "skim1cm" in extra_args else 4000),
                 condor_submit_params = {
                     "sites":"T2_US_UCSD",
                     "classads": [
@@ -81,8 +81,8 @@ def get_signal_tasks(pattern,tag,extra_args="",func_dataset=None):
 
 def get_bg_tasks(tag,extra_args=""):
     samples = [
-            # DBSSample(dataset="/JpsiToMuMu_JpsiPt8_TuneCP5_13TeV-pythia8/RunIIAutumn18DRPremix-102X_upgrade2018_realistic_v15-v1/AODSIM")
-            DBSSample(dataset="/BuToKJpsi_ToMuMu_MuFilter_SoftQCDnonD_TuneCP5_13TeV-pythia8-evtgen/RunIIAutumn18DR-PUPoissonAve20_102X_upgrade2018_realistic_v15-v2/AODSIM")
+            DBSSample(dataset="/JpsiToMuMu_JpsiPt8_TuneCP5_13TeV-pythia8/RunIIAutumn18DRPremix-102X_upgrade2018_realistic_v15-v1/AODSIM"),
+            DBSSample(dataset="/BuToKJpsi_ToMuMu_MuFilter_SoftQCDnonD_TuneCP5_13TeV-pythia8-evtgen/RunIIAutumn18DR-PUPoissonAve20_102X_upgrade2018_realistic_v15-v2/AODSIM"),
             ]
     tasks = []
     for sample in samples:
@@ -123,8 +123,9 @@ if __name__ == "__main__":
             # ["skim_2018C_v4_unblind1fb","v4", ""],
             # ["skim_2018C_v4_unblind1fb","vtestskim1cm", "--skim1cm"],
 
-            # ["skim_2018C_v4_unblind1fb","v5jets", ""],
-            ["skim_2018C_v4_unblind1fb","v6skim1cmjets", "--skim1cm"],
+            ["skim_2018C_v4_unblind1fb","v7jets", ""],
+            ["skim_2018C_v4_unblind1fb","v7skim1cmjets", "--skim1cm"],
+            ["skim_2018C_v4","v7skim1cmjets", "--skim1cm"],
 
             ]
     data_tasks = get_data_tasks(data_info)
@@ -133,7 +134,7 @@ if __name__ == "__main__":
 
     signal_tasks = get_signal_tasks(
             pattern="/hadoop/cms/store/user/namin/ProjectMetis/HToZdZdTo2Mu2X_params_mzd*_ctau*mm_RAWSIM_v1/",
-            tag="v6",
+            tag="v7",
             extra_args="--allevents",
             )
 
@@ -150,7 +151,7 @@ if __name__ == "__main__":
     bg_tasks = []
 
     bg_tasks = get_bg_tasks(
-            tag="v6",
+            tag="v7",
             )
 
     for _ in range(500):
