@@ -230,7 +230,7 @@ class TreeLikeAccessor:
     def __init__(self, pandas_obj):
         self._obj = pandas_obj
 
-    def draw(self, varexp, sel, bins=None):
+    def draw(self, varexp, sel, bins=None, overflow=True):
         try:
             from yahist import Hist1D
         except:
@@ -241,6 +241,7 @@ class TreeLikeAccessor:
         weights = df.eval(sel)
         mask = np.zeros(len(df), dtype=bool)
         extra = dict()
+        extra["overflow"] = overflow
         if (weights.dtype in [int, np.int32]):
             mask = weights != 0
             extra["weights"] = weights[mask]
