@@ -9,6 +9,7 @@ process.load('FWCore.MessageService.MessageLogger_cfi')
 process.load('PhysicsTools.PatAlgos.producersLayer1.patCandidates_cff')
 process.load('Configuration.EventContent.EventContent_cff')
 process.load('Configuration.StandardSequences.GeometryRecoDB_cff')
+process.load('Configuration.StandardSequences.Reconstruction_cff')
 process.load('Configuration.StandardSequences.MagneticField_AutoFromDBCurrent_cff')
 
 
@@ -58,12 +59,12 @@ process.out = cms.OutputModule("PoolOutputModule",
         "keep *_hltScoutingPrimaryVertexPacker_*_*",
         "keep *_hltScoutingPrimaryVertexPackerCaloMuon_*_*",
         "keep *_triggerMaker_*_*",
+        "keep *_hitMaker_*_*",
         "keep *_genParticles_*_*",
         ),
      basketSize = cms.untracked.int32(128*1024), # 128kb basket size instead of ~30kb default
 )
 process.outpath = cms.EndPath(process.out)
-
 
 
 # process.options = cms.untracked.PSet(
@@ -84,8 +85,6 @@ process.countvtx = cms.EDFilter("ScoutingVertexCountFilter",
     src = cms.InputTag("hltScoutingMuonPackerCalo","displacedVtx"),
     minNumber = cms.uint32(1)
 )
-
-
 
 L1Info = ["L1_DoubleMu0", "L1_DoubleMu0_Mass_Min1", "L1_DoubleMu0_OQ",
  "L1_DoubleMu0_SQ", "L1_DoubleMu0_SQ_OS", "L1_DoubleMu0er1p4_SQ_OS_dR_Max1p4",
@@ -108,8 +107,6 @@ L1Info = ["L1_DoubleMu0", "L1_DoubleMu0_Mass_Min1", "L1_DoubleMu0_OQ",
  "L1_TripleMu_5_4_2p5_DoubleMu_5_2p5_OS_Mass_5to17", "L1_TripleMu_5_5_3",
  "L1_ZeroBias"]
 
-############define here the HLT trigger paths to monitor: Alias, TriggerSelection and Duplicates
-           #Scouting
 HLTInfo = [
            ['CaloJet40_CaloBTagScouting',        'DST_CaloJet40_CaloBTagScouting_v*'],
            ['CaloScoutingHT250',                 'DST_HT250_CaloScouting_v*'],
@@ -140,10 +137,19 @@ process.triggerMaker = cms.EDProducer("TriggerMaker",
         l1Seeds = cms.vstring(L1Info),
         )
 
+process.hitMaker = cms.EDProducer("HitMaker",
+        muonInputTag = cms.InputTag("hltScoutingMuonPackerCalo"),
+        dvInputTag = cms.InputTag("hltScoutingMuonPackerCalo:displacedVtx"),
+        measurementTrackerEventInputTag = cms.InputTag("MeasurementTrackerEvent"),
+        )
+
+from RecoTracker.MeasurementDet.measurementTrackerEventDefault_cfi import measurementTrackerEventDefault as _measurementTrackerEventDefault
+process.MeasurementTrackerEvent = _measurementTrackerEventDefault.clone()
+
 process.load("EventFilter.L1TRawToDigi.gtStage2Digis_cfi")
 process.gtStage2Digis.InputLabel = cms.InputTag( "hltFEDSelectorL1" )
 
 if do_skim:
-    process.skimpath = cms.Path(process.countmu * process.countvtx * process.gtStage2Digis * process.triggerMaker)
+    process.skimpath = cms.Path(process.countmu * process.countvtx * process.gtStage2Digis * process.triggerMaker * process.MeasurementTrackerEvent * process.hitMaker)
 else:
-    process.skimpath = cms.Path(process.gtStage2Digis * process.triggerMaker)
+    process.skimpath = cms.Path(process.gtStage2Digis * process.triggerMaker * process.MeasurementTrackerEvent * process.hitMaker)
