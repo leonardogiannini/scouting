@@ -48,7 +48,7 @@ void HitMaker::beginRun(const edm::Run& iRun, const edm::EventSetup& iSetup){
 
 void HitMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
 
-    bool debug = true;
+    bool debug = false;
 
     auto const& searchGeom = *(*measurementTracker_).geometricSearchTracker();
     auto const& prop = *propagatorHandle_;

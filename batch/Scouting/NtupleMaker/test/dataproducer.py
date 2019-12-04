@@ -24,6 +24,7 @@ process.maxEvents = cms.untracked.PSet(
     input = cms.untracked.int32(20000)
 )
 process.MessageLogger.cerr.FwkReport.reportEvery = 5000
+process.MessageLogger.suppressWarning = cms.untracked.vstring(["MeasurementTrackerEvent"])
 
 # Input source
 process.source = cms.Source("PoolSource",

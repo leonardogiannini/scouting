@@ -25,6 +25,7 @@ process.maxEvents = cms.untracked.PSet(
     # input = cms.untracked.int32(1000)
 )
 process.MessageLogger.cerr.FwkReport.reportEvery = 2000
+process.MessageLogger.suppressWarning = cms.untracked.vstring(["MeasurementTrackerEvent"])
 
 import glob
 # fnames = glob.glob("/hadoop/cms/store/user/namin/DisplacedMuons/2018/GluGluTo0PHH125ToZprimeZprimeTo2Mu2X_CTauVprime_50mm/PREMIX-RAWSIM/*.root")
