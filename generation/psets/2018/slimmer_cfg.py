@@ -9,6 +9,7 @@ process.load('FWCore.MessageService.MessageLogger_cfi')
 process.load('PhysicsTools.PatAlgos.producersLayer1.patCandidates_cff')
 process.load('Configuration.EventContent.EventContent_cff')
 process.load('Configuration.StandardSequences.GeometryRecoDB_cff')
+process.load('Configuration.StandardSequences.Reconstruction_cff')
 process.load('Configuration.StandardSequences.MagneticField_AutoFromDBCurrent_cff')
 
 
@@ -46,6 +47,7 @@ process.out = cms.OutputModule("PoolOutputModule",
         "keep *_hltScoutingPrimaryVertexPacker_*_*",
         "keep *_hltScoutingPrimaryVertexPackerCaloMuon_*_*",
         "keep *_triggerMaker_*_*",
+        "keep *_hitMaker_*_*",
         "keep *_genParticles_*_*",
         ),
      basketSize = cms.untracked.int32(128*1024), # 128kb basket size instead of ~30kb default
@@ -128,10 +130,19 @@ process.triggerMaker = cms.EDProducer("TriggerMaker",
         l1Seeds = cms.vstring(L1Info),
         )
 
+process.hitMaker = cms.EDProducer("HitMaker",
+        muonInputTag = cms.InputTag("hltScoutingMuonPackerCalo"),
+        dvInputTag = cms.InputTag("hltScoutingMuonPackerCalo:displacedVtx"),
+        measurementTrackerEventInputTag = cms.InputTag("MeasurementTrackerEvent"),
+        )
+
+from RecoTracker.MeasurementDet.measurementTrackerEventDefault_cfi import measurementTrackerEventDefault as _measurementTrackerEventDefault
+process.MeasurementTrackerEvent = _measurementTrackerEventDefault.clone()
+
 process.load("EventFilter.L1TRawToDigi.gtStage2Digis_cfi")
 process.gtStage2Digis.InputLabel = cms.InputTag( "hltFEDSelectorL1" )
 
 if do_skim:
-    process.skimpath = cms.Path(process.countmu * process.countvtx * process.gtStage2Digis * process.triggerMaker)
+    process.skimpath = cms.Path(process.countmu * process.countvtx * process.gtStage2Digis * process.triggerMaker * process.MeasurementTrackerEvent * process.hitMaker)
 else:
-    process.skimpath = cms.Path(process.gtStage2Digis * process.triggerMaker)
+    process.skimpath = cms.Path(process.gtStage2Digis * process.triggerMaker * process.MeasurementTrackerEvent * process.hitMaker)

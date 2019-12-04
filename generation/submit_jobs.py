@@ -22,24 +22,31 @@ def submit():
 
     # Edit these parameters.
     # in total, there will be `len(masses)*len(ctaus)*events_per_point` events
-    tag = "v1"
+    # tag = "v1"
+    # tag = "vtest"
+    tag = "v8"
 
-    # events_per_point = 100000
-    # events_per_job = 500
-    # masses = [5,8,10,12,15,18,20,25]
-    # ctaus = [10,25,50]
-
-    # 5x the events for this particular point
-    events_per_point = 500000
+    events_per_point = 50000
     events_per_job = 500
-    masses = [20]
-    ctaus = [50]
+    masses = [2,5,8,10,12,15,18,20,25]
+    ctaus = [10,25,50]
+
+    # events_per_point = 200000
+    # events_per_job = 500
+    # masses = [20]
+    # ctaus = [50]
 
     for mass,ctau in itertools.product(masses,ctaus):
+
+        # 4x the events for this particular point
+        epp = int(events_per_point)
+        if mass == 20 and ctau == 50:
+            epp = int(4*events_per_point)
+
         reqname = "mzd{}_ctau{}_{}".format(mass,ctau,tag)
-        njobs = events_per_point//events_per_job
+        njobs = epp//events_per_job
         task = CondorTask(
-                sample = DummySample(dataset="/HToZdZdTo2Mu2X/params_mzd{}_ctau{}mm/RAWSIM".format(mass,ctau),N=njobs,nevents=events_per_point),
+                sample = DummySample(dataset="/HToZdZdTo2Mu2X/params_mzd{}_ctau{}mm/RAWSIM".format(mass,ctau),N=njobs,nevents=epp),
                 output_name = "output.root",
                 executable = "executables/condor_executable.sh",
                 tarfile = "package.tar.gz",
