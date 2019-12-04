@@ -75,17 +75,41 @@ bool is_ray_inside_face(const TVector3 v[], TVector3 rayorig, TVector3 raydir) {
     return inside;
 }
 
+
+
 int ray_module_crosses(TVector3 rayorig, TVector3 raydir) {
     int ncrosses = 0;
+    float threshx = 3.0;
+    float threshy = 3.0;
+    float threshz = 7.0;
     for (unsigned int imodule = 0; imodule < NMODULES; imodule++) {
-        int nhitfaces = 0;
+        // Don't waste time on modules that are "behind" the trajectory:
+        // If going in +z and the module is at lower z, no way we can cross it.
+        // Give it a threshold of 7cm because we pick the first point in the module
+        // face as a reference point, but modules can be ~6.5cm long in z
+        // Similar for x and y with tighter threshold because those widths are smaller
+        float diffz = rayorig[2] - module_faces[imodule][0][0][2];
+        if (raydir[2] > 0) {
+            if (diffz > threshz) continue;
+        } else {
+            if (diffz < -threshz) continue;
+        }
+        float diffy = rayorig[1] - module_faces[imodule][0][0][1];
+        if (raydir[1] > 0) {
+            if (diffy > threshy) continue;
+        } else {
+            if (diffy < -threshy) continue;
+        }
+        float diffx = rayorig[0] - module_faces[imodule][0][0][0];
+        if (raydir[0] > 0) {
+            if (diffx > threshx) continue;
+        } else {
+            if (diffx < -threshx) continue;
+        }
         for (unsigned int iface = 0; iface < NFACES; iface++) {
             if (is_ray_inside_face(module_faces[imodule][iface], rayorig, raydir)) {
-                nhitfaces += 1;
-                if (nhitfaces >= 2) {
-                    ncrosses += 1;
-                    break;
-                }
+                ncrosses += 1;
+                break;
             }
         }
     }

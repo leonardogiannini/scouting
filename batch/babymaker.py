@@ -73,6 +73,7 @@ class Looper(object):
         self.has_gen_info = any("genParticles" in name for name in branchnames)
         self.is_mc = self.has_gen_info
         self.has_trigger_info = any("triggerMaker" in name for name in branchnames)
+        self.has_hit_info = any("hitMaker" in name for name in branchnames)
 
         if not self.has_trigger_info:
             print("[!] Didn't find trigger branches. Saving dummy trigger information.")
@@ -87,6 +88,8 @@ class Looper(object):
             ch.SetBranchStatus("*hltScoutingTrackPacker*",1)
         if self.has_trigger_info:
             ch.SetBranchStatus("*triggerMaker*",1)
+        if self.has_hit_info:
+            ch.SetBranchStatus("*hitMaker*",1)
         if self.has_gen_info:
             ch.SetBranchStatus("*genParticles*",1)
 
@@ -95,11 +98,13 @@ class Looper(object):
 
         cachesize = 30000000
         ch.SetCacheSize(cachesize)
-        ch.SetCacheLearnEntries(250)
+        ch.SetCacheLearnEntries(500)
 
     def make_branch(self, name, tstr="vi"):
         extra = []
         if tstr == "vvi": obj = r.vector("vector<int>")()
+        if tstr == "vvf": obj = r.vector("vector<float>")()
+        if tstr == "vvb": obj = r.vector("vector<bool>")()
         if tstr == "vi": obj = r.vector("int")()
         if tstr == "vf": obj = r.vector("float")()
         if tstr == "vb": obj = r.vector("bool")()
@@ -212,9 +217,9 @@ class Looper(object):
         make_branch("MET_pt_muonCorr", "f")
         make_branch("MET_phi_muonCorr", "f")
         make_branch("rho", "f")
-        make_branch("LeadingPair_mass", "f")
-        make_branch("LeadingPair_sameVtx", "b")
-        make_branch("LeadingPair_isOS", "b")
+        # make_branch("LeadingPair_mass", "f")
+        # make_branch("LeadingPair_sameVtx", "b")
+        # make_branch("LeadingPair_isOS", "b")
 
         make_branch("nDV", "i")
         make_branch("nDV_good", "i")
@@ -320,10 +325,19 @@ class Looper(object):
         make_branch("Muon_vz", "vf")
         make_branch("Muon_dxyCorr", "vf")
         make_branch("Muon_nExpectedPixelHits", "vi")
+        make_branch("Muon_nExpectedPixelHitsCrappy", "vi")
         make_branch("Muon_jetIdx1", "vi")
         make_branch("Muon_jetIdx2", "vi")
         make_branch("Muon_drjet", "vf")
         make_branch("Muon_good", "vb")
+
+        make_branch("Muon_hit_x", "vvf")
+        make_branch("Muon_hit_y", "vvf")
+        make_branch("Muon_hit_z", "vvf")
+        make_branch("Muon_hit_active", "vvb")
+        make_branch("Muon_hit_barrel", "vvb")
+        make_branch("Muon_hit_ndet", "vvi")
+        make_branch("Muon_hit_layer", "vvi")
 
         make_branch("nGenPart", "i")
         make_branch("GenPart_pt", "vf")
@@ -589,7 +603,27 @@ class Looper(object):
             metx_muoncorr = metpt*math.cos(metphi)
             mety_muoncorr = metpt*math.sin(metphi)
             ngoodmuon = 0
-            for muon in muons:
+
+            if self.has_hit_info:
+                muon_hit_x = evt.floatss_hitMaker_x_SLIM.product()
+                muon_hit_y = evt.floatss_hitMaker_y_SLIM.product()
+                muon_hit_z = evt.floatss_hitMaker_z_SLIM.product()
+                muon_hit_layer = evt.intss_hitMaker_layernum_SLIM.product()
+                muon_hit_ndet = evt.intss_hitMaker_ndet_SLIM.product()
+                muon_hit_barrel = evt.boolss_hitMaker_isbarrel_SLIM.product()
+                muon_hit_active = evt.boolss_hitMaker_isactive_SLIM.product()
+                muon_hit_expectedhits = evt.ints_hitMaker_nexpectedhits_SLIM.product()
+                for i in range(muon_hit_expectedhits.size()):
+                    branches["Muon_hit_x"].push_back(muon_hit_x[i])
+                    branches["Muon_hit_y"].push_back(muon_hit_y[i])
+                    branches["Muon_hit_z"].push_back(muon_hit_z[i])
+                    branches["Muon_hit_active"].push_back(muon_hit_active[i])
+                    branches["Muon_hit_barrel"].push_back(muon_hit_barrel[i])
+                    branches["Muon_hit_ndet"].push_back(muon_hit_ndet[i])
+                    branches["Muon_hit_layer"].push_back(muon_hit_layer[i])
+                    branches["Muon_nExpectedPixelHits"].push_back(muon_hit_expectedhits[i])
+
+            for imuon,muon in enumerate(muons):
                 pt = muon.pt()
                 eta = muon.eta()
                 phi = muon.phi()
@@ -670,7 +704,9 @@ class Looper(object):
                 branches["Muon_dxyCorr"].push_back(dxyCorr)
                 vmu = r.TLorentzVector()
                 vmu.SetPtEtaPhiM(muon.pt(), muon.eta(), muon.phi(), 0.10566)
-                branches["Muon_nExpectedPixelHits"].push_back(self.calculate_module_crosses(vx,vy,vz,vmu.Px(),vmu.Py(),vmu.Pz()))
+                branches["Muon_nExpectedPixelHitsCrappy"].push_back(self.calculate_module_crosses(vx,vy,vz,vmu.Px(),vmu.Py(),vmu.Pz()))
+                if not self.has_hit_info:
+                    branches["Muon_nExpectedPixelHits"].push_back(0)
 
                 goodmuon = (
                         (muon.trackIso() < 0.1) and
@@ -690,18 +726,18 @@ class Looper(object):
 
 
 
-            if len(muons) >= 2:
-                v1 = r.TLorentzVector()
-                v2 = r.TLorentzVector()
-                v1.SetPtEtaPhiM(muons[0].pt(), muons[0].eta(), muons[0].phi(), muons[0].m())
-                v2.SetPtEtaPhiM(muons[1].pt(), muons[1].eta(), muons[1].phi(), muons[1].m())
-                branches["LeadingPair_mass"][0] = (v1+v2).M()
-                branches["LeadingPair_sameVtx"][0] = (branches["Muon_vtxIdx1"][0]>=0) and (branches["Muon_vtxIdx1"][0] == branches["Muon_vtxIdx1"][1])
-                branches["LeadingPair_isOS"][0] = (branches["Muon_charge"][0] == -branches["Muon_charge"][1])
-            else:
-                branches["LeadingPair_mass"][0] = 0.
-                branches["LeadingPair_sameVtx"][0] = False
-                branches["LeadingPair_isOS"][0] = False
+            # if len(muons) >= 2:
+            #     v1 = r.TLorentzVector()
+            #     v2 = r.TLorentzVector()
+            #     v1.SetPtEtaPhiM(muons[0].pt(), muons[0].eta(), muons[0].phi(), muons[0].m())
+            #     v2.SetPtEtaPhiM(muons[1].pt(), muons[1].eta(), muons[1].phi(), muons[1].m())
+            #     branches["LeadingPair_mass"][0] = (v1+v2).M()
+            #     branches["LeadingPair_sameVtx"][0] = (branches["Muon_vtxIdx1"][0]>=0) and (branches["Muon_vtxIdx1"][0] == branches["Muon_vtxIdx1"][1])
+            #     branches["LeadingPair_isOS"][0] = (branches["Muon_charge"][0] == -branches["Muon_charge"][1])
+            # else:
+            #     branches["LeadingPair_mass"][0] = 0.
+            #     branches["LeadingPair_sameVtx"][0] = False
+            #     branches["LeadingPair_isOS"][0] = False
 
             self.outtree.Fill()
 
