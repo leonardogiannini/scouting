@@ -25,7 +25,7 @@ def xrootdify(fname):
     return fname
 
 def argsort(seq, key=lambda x:x):
-    if not seq:
+    if len(seq) == 0:
         return [], []
     # return two lists: indices that sort `seq`, and the sorted `seq`, according to `key` function
     indices, sorted_seq = zip(*sorted(enumerate(seq), key=lambda y:key(y[1])))
