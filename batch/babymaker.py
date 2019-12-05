@@ -24,6 +24,15 @@ def xrootdify(fname):
         fname = "root://cmsxrootd.fnal.gov/" + fname
     return fname
 
+def argsort(seq, key=lambda x:x):
+    # return two lists: indices that sort `seq`, and the sorted `seq`, according to `key` function
+    indices, sorted_seq = zip(*sorted(enumerate(seq), key=lambda y:key(y[1])))
+    return indices, sorted_seq
+
+def sortwitharg(seq, arg):
+    # reorder `seq` according to t
+    return [seq[i] for i in arg]
+
 class Looper(object):
 
     def __init__(self,fnames=[], output="output.root", nevents=-1, expected=-1, skim1cm=False, allevents=False, treename="Events"):
@@ -412,7 +421,8 @@ class Looper(object):
             pvms = evt.ScoutingVertexs_hltScoutingPrimaryVertexPackerCaloMuon_primaryVtx_HLT.product()
 
             # sort muons in descending pT (turns out a nontrivial amount are not sorted already, like 5%-10% I think)
-            muons = sorted(muons, key=lambda x:-x.pt())
+            # muons = sorted(muons, key=lambda x:-x.pt())
+            muon_sort_indices, muons = argsort(muons, key=lambda x:-x.pt())
 
             if self.do_trigger:
                 hltresults = map(bool,evt.bools_triggerMaker_hltresult_SLIM.product())
@@ -605,15 +615,17 @@ class Looper(object):
             ngoodmuon = 0
 
             if self.has_hit_info:
-                muon_hit_x = evt.floatss_hitMaker_x_SLIM.product()
-                muon_hit_y = evt.floatss_hitMaker_y_SLIM.product()
-                muon_hit_z = evt.floatss_hitMaker_z_SLIM.product()
-                muon_hit_layer = evt.intss_hitMaker_layernum_SLIM.product()
-                muon_hit_ndet = evt.intss_hitMaker_ndet_SLIM.product()
-                muon_hit_barrel = evt.boolss_hitMaker_isbarrel_SLIM.product()
-                muon_hit_active = evt.boolss_hitMaker_isactive_SLIM.product()
-                muon_hit_expectedhits = evt.ints_hitMaker_nexpectedhits_SLIM.product()
-                for i in range(muon_hit_expectedhits.size()):
+                # NOTE, need to sort these to maintain same order as muons since we have sorted them by pT earlier
+                # FIXME if we somehow embedded these into the muons, that would be nicer. or use classes properly in this script...
+                muon_hit_x = sortwitharg(evt.floatss_hitMaker_x_SLIM.product(), muon_sort_indices)
+                muon_hit_y = sortwitharg(evt.floatss_hitMaker_y_SLIM.product(), muon_sort_indices)
+                muon_hit_z = sortwitharg(evt.floatss_hitMaker_z_SLIM.product(), muon_sort_indices)
+                muon_hit_layer = sortwitharg(evt.intss_hitMaker_layernum_SLIM.product(), muon_sort_indices)
+                muon_hit_ndet = sortwitharg(evt.intss_hitMaker_ndet_SLIM.product(), muon_sort_indices)
+                muon_hit_barrel = sortwitharg(evt.boolss_hitMaker_isbarrel_SLIM.product(), muon_sort_indices)
+                muon_hit_active = sortwitharg(evt.boolss_hitMaker_isactive_SLIM.product(), muon_sort_indices)
+                muon_hit_expectedhits = sortwitharg(evt.ints_hitMaker_nexpectedhits_SLIM.product(), muon_sort_indices)
+                for i in range(len(muon_hit_expectedhits)):
                     branches["Muon_hit_x"].push_back(muon_hit_x[i])
                     branches["Muon_hit_y"].push_back(muon_hit_y[i])
                     branches["Muon_hit_z"].push_back(muon_hit_z[i])
