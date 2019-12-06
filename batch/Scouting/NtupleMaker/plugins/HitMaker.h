@@ -6,7 +6,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include <memory>
+#include <map>
 
 // user include files
 #include "FWCore/Framework/interface/Frameworkfwd.h"
@@ -20,6 +20,7 @@
 #include "DataFormats/Scouting/interface/ScoutingMuon.h"
 #include "DataFormats/Scouting/interface/ScoutingVertex.h"
 
+#include "DataFormats/GeometrySurface/interface/Cylinder.h"
 #include "DataFormats/GeometrySurface/interface/PlaneBuilder.h"
 #include "DataFormats/GeometryVector/interface/GlobalPoint.h"
 #include "DataFormats/GeometryVector/interface/GlobalVector.h"
@@ -49,6 +50,10 @@
 
 #include "TLorentzVector.h"
 
+// for quick debugging. remove later
+// https://raw.githubusercontent.com/nlohmann/json/develop/single_include/nlohmann/json.hpp
+#include "extra/json.hpp"
+
 class HitMaker : public edm::stream::EDProducer<> {
 public:
   explicit HitMaker(const edm::ParameterSet&);
@@ -68,6 +73,10 @@ private:
   edm::ESHandle<MagneticField> magfield_;
   edm::ESHandle<GlobalTrackingGeometry> theGeo_;
   edm::ESHandle<Propagator> propagatorHandle_;
+
+  float maxSigma_;
+  float maxChi2_;
+  bool startAtTrackRef_;
 
 };
 
