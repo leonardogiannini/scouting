@@ -74,10 +74,6 @@ private:
   edm::ESHandle<GlobalTrackingGeometry> theGeo_;
   edm::ESHandle<Propagator> propagatorHandle_;
 
-  float maxSigma_;
-  float maxChi2_;
-  bool startAtTrackRef_;
-
 };
 
 #endif
