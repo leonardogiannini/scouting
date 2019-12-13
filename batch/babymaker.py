@@ -336,7 +336,8 @@ class Looper(object):
         make_branch("Muon_vz", "vf")
         make_branch("Muon_dxyCorr", "vf")
         make_branch("Muon_nExpectedPixelHits", "vi")
-        make_branch("Muon_nExpectedPixelHitsCrappy", "vi")
+        make_branch("Muon_nExpectedPixelHitsSingle", "vi")
+        # make_branch("Muon_nExpectedPixelHitsCrappy", "vi")
         make_branch("Muon_jetIdx1", "vi")
         make_branch("Muon_jetIdx2", "vi")
         make_branch("Muon_drjet", "vf")
@@ -626,8 +627,9 @@ class Looper(object):
                 muon_hit_ndet = sortwitharg(evt.intss_hitMaker_ndet_SLIM.product(), muon_sort_indices)
                 muon_hit_barrel = sortwitharg(evt.boolss_hitMaker_isbarrel_SLIM.product(), muon_sort_indices)
                 muon_hit_active = sortwitharg(evt.boolss_hitMaker_isactive_SLIM.product(), muon_sort_indices)
-                muon_hit_expectedhits = sortwitharg(evt.ints_hitMaker_nexpectedhits_SLIM.product(), muon_sort_indices)
-                for i in range(len(muon_hit_expectedhits)):
+                muon_hit_expectedhitsmultiple = sortwitharg(evt.ints_hitMaker_nexpectedhitsmultiple_SLIM.product(), muon_sort_indices)
+                muon_hit_expectedhitssingle = sortwitharg(evt.ints_hitMaker_nexpectedhits_SLIM.product(), muon_sort_indices)
+                for i in range(len(muon_hit_expectedhitsmultiple)):
                     branches["Muon_hit_x"].push_back(muon_hit_x[i])
                     branches["Muon_hit_y"].push_back(muon_hit_y[i])
                     branches["Muon_hit_z"].push_back(muon_hit_z[i])
@@ -635,7 +637,8 @@ class Looper(object):
                     branches["Muon_hit_barrel"].push_back(muon_hit_barrel[i])
                     branches["Muon_hit_ndet"].push_back(muon_hit_ndet[i])
                     branches["Muon_hit_layer"].push_back(muon_hit_layer[i])
-                    branches["Muon_nExpectedPixelHits"].push_back(muon_hit_expectedhits[i])
+                    branches["Muon_nExpectedPixelHits"].push_back(muon_hit_expectedhitsmultiple[i])
+                    branches["Muon_nExpectedPixelHitsSingle"].push_back(muon_hit_expectedhitssingle[i])
 
             for imuon,muon in enumerate(muons):
                 pt = muon.pt()
@@ -716,11 +719,12 @@ class Looper(object):
                 branches["Muon_vy"].push_back(vy)
                 branches["Muon_vz"].push_back(vz)
                 branches["Muon_dxyCorr"].push_back(dxyCorr)
-                vmu = r.TLorentzVector()
-                vmu.SetPtEtaPhiM(muon.pt(), muon.eta(), muon.phi(), 0.10566)
-                branches["Muon_nExpectedPixelHitsCrappy"].push_back(self.calculate_module_crosses(vx,vy,vz,vmu.Px(),vmu.Py(),vmu.Pz()))
+                # vmu = r.TLorentzVector()
+                # vmu.SetPtEtaPhiM(muon.pt(), muon.eta(), muon.phi(), 0.10566)
+                # branches["Muon_nExpectedPixelHitsCrappy"].push_back(self.calculate_module_crosses(vx,vy,vz,vmu.Px(),vmu.Py(),vmu.Pz()))
                 if not self.has_hit_info:
                     branches["Muon_nExpectedPixelHits"].push_back(0)
+                    branches["Muon_nExpectedPixelHitsSingle"].push_back(0)
 
                 goodmuon = (
                         (muon.trackIso() < 0.1) and
@@ -759,6 +763,15 @@ class Looper(object):
 
         neventsout = self.outtree.GetEntries()
         self.outtree.Write()
+
+        
+        # number of events in the input chain
+        r.TParameter(int)("nevents_input",nevents_in).Write()
+        # number of events we actually looped over
+        r.TParameter(int)("nevents_processed",ievt).Write()
+        # number of events in the output tree
+        r.TParameter(int)("nevents_output",self.outtree.GetEntries()).Write()
+
         self.outfile.Close()
 
         print(">>> Finished slim/skim of {} events in {:.2f} seconds @ {:.1f}Hz".format(ievt,(t1-t0),ievt/(t1-t0)))
