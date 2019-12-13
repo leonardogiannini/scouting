@@ -35,6 +35,25 @@ def sortwitharg(seq, arg):
     # reorder `seq` according to t
     return [seq[i] for i in arg]
 
+def get_track_reference_point(muon, dvx,dvy,dvz):
+    pt = muon.pt()
+    eta = muon.eta()
+    phi = muon.phi()
+
+    dsz = muon.trk_dsz()
+    dz = muon.dz()
+    lmb = muon.trk_lambda()
+    dxy = muon.dxyCorr
+
+    sinphi = math.sin(phi)
+    cosphi = math.cos(phi)
+    sinlmb = math.sin(lmb)
+    tanlmb = sinlmb/math.cos(lmb)
+    refz = 1.0*dz
+    refx = -sinphi*dxy - (cosphi/sinlmb)*dsz + (cosphi/tanlmb)*refz
+    refy =  cosphi*dxy - (sinphi/sinlmb)*dsz + (sinphi/tanlmb)*refz
+    return refx, refy, refz
+
 class Looper(object):
 
     def __init__(self,fnames=[], output="output.root", nevents=-1, expected=-1, skim1cm=False, allevents=False, treename="Events"):
@@ -223,17 +242,26 @@ class Looper(object):
         make_branch("pass_fiducialgen", "b")
         make_branch("pass_fiducialgen_norho", "b")
 
+        # more event level
+        make_branch("dimuon_isos", "b")
+        make_branch("dimuon_pt", "f")
+        make_branch("dimuon_eta", "f")
+        make_branch("dimuon_phi", "f")
+        make_branch("dimuon_mass", "f")
+        make_branch("absdphimumu", "f")
+        make_branch("absdphimudv", "f")
+        make_branch("minabsdxy", "f")
+        make_branch("logabsetaphi", "f")
+        make_branch("cosphi", "f")
+        make_branch("pass_baseline", "b")
+        make_branch("pass_baseline_iso", "b")
+
         make_branch("MET_pt", "f")
         make_branch("MET_phi", "f")
-        make_branch("MET_pt_muonCorr", "f")
-        make_branch("MET_phi_muonCorr", "f")
         make_branch("rho", "f")
-        # make_branch("LeadingPair_mass", "f")
-        # make_branch("LeadingPair_sameVtx", "b")
-        # make_branch("LeadingPair_isOS", "b")
 
         make_branch("nDV", "i")
-        make_branch("nDV_good", "i")
+        make_branch("nDV_passid", "i")
         make_branch("DV_x","vf")
         make_branch("DV_y","vf")
         make_branch("DV_z","vf")
@@ -244,7 +272,7 @@ class Looper(object):
         make_branch("DV_chi2","vf")
         make_branch("DV_ndof","vi")
         make_branch("DV_isValidVtx","vb")
-        make_branch("DV_good","vb")
+        make_branch("DV_passid","vb")
         make_branch("DV_rho", "vf")
         make_branch("DV_rhoCorr", "vf")
         make_branch("DV_inPixelRectangles", "vb")
@@ -256,18 +284,18 @@ class Looper(object):
             make_branch("Jet_eta", "vf")
             make_branch("Jet_phi", "vf")
             make_branch("Jet_m", "vf")
-            make_branch("Jet_jetArea", "vf")
-            make_branch("Jet_maxEInEmTowers", "vf")
-            make_branch("Jet_maxEInHadTowers", "vf")
-            make_branch("Jet_hadEnergyInHB", "vf")
-            make_branch("Jet_hadEnergyInHE", "vf")
-            make_branch("Jet_hadEnergyInHF", "vf")
-            make_branch("Jet_emEnergyInEB", "vf")
-            make_branch("Jet_emEnergyInEE", "vf")
-            make_branch("Jet_emEnergyInHF", "vf")
-            make_branch("Jet_towersArea", "vf")
-            make_branch("Jet_mvaDiscriminator", "vf")
-            make_branch("Jet_btagDiscriminator", "vf")
+            # make_branch("Jet_jetArea", "vf")
+            # make_branch("Jet_maxEInEmTowers", "vf")
+            # make_branch("Jet_maxEInHadTowers", "vf")
+            # make_branch("Jet_hadEnergyInHB", "vf")
+            # make_branch("Jet_hadEnergyInHE", "vf")
+            # make_branch("Jet_hadEnergyInHF", "vf")
+            # make_branch("Jet_emEnergyInEB", "vf")
+            # make_branch("Jet_emEnergyInEE", "vf")
+            # make_branch("Jet_emEnergyInHF", "vf")
+            # make_branch("Jet_towersArea", "vf")
+            # make_branch("Jet_mvaDiscriminator", "vf")
+            # make_branch("Jet_btagDiscriminator", "vf")
 
         make_branch("nPV", "i")
         make_branch("PV_x", "vf")
@@ -301,7 +329,8 @@ class Looper(object):
             make_branch("Track_dz", "vf")
 
         make_branch("nMuon", "i")
-        make_branch("nMuon_good", "i")
+        make_branch("nMuon_passid", "i")
+        make_branch("nMuon_passiso", "i")
         make_branch("Muon_pt", "vf")
         make_branch("Muon_eta", "vf")
         make_branch("Muon_phi", "vf")
@@ -334,22 +363,24 @@ class Looper(object):
         make_branch("Muon_vx", "vf")
         make_branch("Muon_vy", "vf")
         make_branch("Muon_vz", "vf")
+        make_branch("Muon_trk_refx", "vf")
+        make_branch("Muon_trk_refy", "vf")
+        make_branch("Muon_trk_refz", "vf")
         make_branch("Muon_dxyCorr", "vf")
         make_branch("Muon_nExpectedPixelHits", "vi")
-        make_branch("Muon_nExpectedPixelHitsSingle", "vi")
-        # make_branch("Muon_nExpectedPixelHitsCrappy", "vi")
+        make_branch("Muon_nExcessPixelHits", "vi")
         make_branch("Muon_jetIdx1", "vi")
-        make_branch("Muon_jetIdx2", "vi")
         make_branch("Muon_drjet", "vf")
-        make_branch("Muon_good", "vb")
+        make_branch("Muon_passid", "vb")
+        make_branch("Muon_passiso", "vb")
 
-        make_branch("Muon_hit_x", "vvf")
-        make_branch("Muon_hit_y", "vvf")
-        make_branch("Muon_hit_z", "vvf")
-        make_branch("Muon_hit_active", "vvb")
-        make_branch("Muon_hit_barrel", "vvb")
-        make_branch("Muon_hit_ndet", "vvi")
-        make_branch("Muon_hit_layer", "vvi")
+        # make_branch("Muon_hit_x", "vvf")
+        # make_branch("Muon_hit_y", "vvf")
+        # make_branch("Muon_hit_z", "vvf")
+        # make_branch("Muon_hit_active", "vvb")
+        # make_branch("Muon_hit_barrel", "vvb")
+        # make_branch("Muon_hit_ndet", "vvi")
+        # make_branch("Muon_hit_layer", "vvi")
 
         make_branch("nGenPart", "i")
         make_branch("GenPart_pt", "vf")
@@ -473,7 +504,7 @@ class Looper(object):
             branches["BS_y"][0] = bsy
             branches["BS_z"][0] = bsz
 
-            ngooddv = 0
+            ndv_passid = 0
             for dv in dvs:
                 vx = dv.x()
                 vy = dv.y()
@@ -493,12 +524,16 @@ class Looper(object):
                 branches["DV_rho"].push_back(rho)
                 branches["DV_rhoCorr"].push_back(rhoCorr)
                 branches["DV_inPixelRectangles"].push_back(self.in_pixel_rectangles(vx,vy,vz))
-                # branches["DV_inPixelRectanglesRough"].push_back(self.in_pixel_rectangles_rough(vx,vy,vz))
-                gooddv = ((dv.xError() < 0.05) and (dv.yError() < 0.05) and (dv.zError() < 0.10))
-                branches["DV_good"].push_back(gooddv)
-                ngooddv += gooddv
+                gooddv = (
+                        (dv.xError() < 0.05) 
+                        and (dv.yError() < 0.05) 
+                        and (dv.zError() < 0.10)
+                        and (dv.chi2()/dv.ndof() < 5)
+                        )
+                ndv_passid += gooddv
+                branches["DV_passid"].push_back(gooddv)
             branches["nDV"][0] = len(dvs)
-            branches["nDV_good"][0] = ngooddv
+            branches["nDV_passid"][0] = ndv_passid
 
             # I think these only get calculated/written out when mass>10gev (event also fell into PFscouting stream)
             # so most of the pv collections are size 0.
@@ -533,18 +568,18 @@ class Looper(object):
                     branches["Jet_eta"].push_back(jet.eta())
                     branches["Jet_phi"].push_back(jet.phi())
                     branches["Jet_m"].push_back(jet.m())
-                    branches["Jet_jetArea"].push_back(jet.jetArea())
-                    branches["Jet_maxEInEmTowers"].push_back(jet.maxEInEmTowers())
-                    branches["Jet_maxEInHadTowers"].push_back(jet.maxEInHadTowers())
-                    branches["Jet_hadEnergyInHB"].push_back(jet.hadEnergyInHB())
-                    branches["Jet_hadEnergyInHE"].push_back(jet.hadEnergyInHE())
-                    branches["Jet_hadEnergyInHF"].push_back(jet.hadEnergyInHF())
-                    branches["Jet_emEnergyInEB"].push_back(jet.emEnergyInEB())
-                    branches["Jet_emEnergyInEE"].push_back(jet.emEnergyInEE())
-                    branches["Jet_emEnergyInHF"].push_back(jet.emEnergyInHF())
-                    branches["Jet_towersArea"].push_back(jet.towersArea())
-                    branches["Jet_mvaDiscriminator"].push_back(jet.mvaDiscriminator())
-                    branches["Jet_btagDiscriminator"].push_back(jet.btagDiscriminator())
+                    # branches["Jet_jetArea"].push_back(jet.jetArea())
+                    # branches["Jet_maxEInEmTowers"].push_back(jet.maxEInEmTowers())
+                    # branches["Jet_maxEInHadTowers"].push_back(jet.maxEInHadTowers())
+                    # branches["Jet_hadEnergyInHB"].push_back(jet.hadEnergyInHB())
+                    # branches["Jet_hadEnergyInHE"].push_back(jet.hadEnergyInHE())
+                    # branches["Jet_hadEnergyInHF"].push_back(jet.hadEnergyInHF())
+                    # branches["Jet_emEnergyInEB"].push_back(jet.emEnergyInEB())
+                    # branches["Jet_emEnergyInEE"].push_back(jet.emEnergyInEE())
+                    # branches["Jet_emEnergyInHF"].push_back(jet.emEnergyInHF())
+                    # branches["Jet_towersArea"].push_back(jet.towersArea())
+                    # branches["Jet_mvaDiscriminator"].push_back(jet.mvaDiscriminator())
+                    # branches["Jet_btagDiscriminator"].push_back(jet.btagDiscriminator())
                     jet_etaphis.append((jet.eta(),jet.phi()))
                 branches["nJet"][0] = len(jets)
 
@@ -613,33 +648,32 @@ class Looper(object):
                     branches["Track_nTrackerLayersWithMeasurement"].push_back(track.tk_nTrackerLayersWithMeasurement())
                     branches["Track_nValidStripHits"].push_back(track.tk_nValidStripHits())
 
-            metx_muoncorr = metpt*math.cos(metphi)
-            mety_muoncorr = metpt*math.sin(metphi)
-            ngoodmuon = 0
+            # metx_muoncorr = metpt*math.cos(metphi)
+            # mety_muoncorr = metpt*math.sin(metphi)
 
             if self.has_hit_info:
                 # NOTE, need to sort these to maintain same order as muons since we have sorted them by pT earlier
                 # FIXME if we somehow embedded these into the muons, that would be nicer. or use classes properly in this script...
-                muon_hit_x = sortwitharg(evt.floatss_hitMaker_x_SLIM.product(), muon_sort_indices)
-                muon_hit_y = sortwitharg(evt.floatss_hitMaker_y_SLIM.product(), muon_sort_indices)
-                muon_hit_z = sortwitharg(evt.floatss_hitMaker_z_SLIM.product(), muon_sort_indices)
-                muon_hit_layer = sortwitharg(evt.intss_hitMaker_layernum_SLIM.product(), muon_sort_indices)
-                muon_hit_ndet = sortwitharg(evt.intss_hitMaker_ndet_SLIM.product(), muon_sort_indices)
-                muon_hit_barrel = sortwitharg(evt.boolss_hitMaker_isbarrel_SLIM.product(), muon_sort_indices)
-                muon_hit_active = sortwitharg(evt.boolss_hitMaker_isactive_SLIM.product(), muon_sort_indices)
+                # muon_hit_x = sortwitharg(evt.floatss_hitMaker_x_SLIM.product(), muon_sort_indices)
+                # muon_hit_y = sortwitharg(evt.floatss_hitMaker_y_SLIM.product(), muon_sort_indices)
+                # muon_hit_z = sortwitharg(evt.floatss_hitMaker_z_SLIM.product(), muon_sort_indices)
+                # muon_hit_layer = sortwitharg(evt.intss_hitMaker_layernum_SLIM.product(), muon_sort_indices)
+                # muon_hit_ndet = sortwitharg(evt.intss_hitMaker_ndet_SLIM.product(), muon_sort_indices)
+                # muon_hit_barrel = sortwitharg(evt.boolss_hitMaker_isbarrel_SLIM.product(), muon_sort_indices)
+                # muon_hit_active = sortwitharg(evt.boolss_hitMaker_isactive_SLIM.product(), muon_sort_indices)
                 muon_hit_expectedhitsmultiple = sortwitharg(evt.ints_hitMaker_nexpectedhitsmultiple_SLIM.product(), muon_sort_indices)
-                muon_hit_expectedhitssingle = sortwitharg(evt.ints_hitMaker_nexpectedhits_SLIM.product(), muon_sort_indices)
                 for i in range(len(muon_hit_expectedhitsmultiple)):
-                    branches["Muon_hit_x"].push_back(muon_hit_x[i])
-                    branches["Muon_hit_y"].push_back(muon_hit_y[i])
-                    branches["Muon_hit_z"].push_back(muon_hit_z[i])
-                    branches["Muon_hit_active"].push_back(muon_hit_active[i])
-                    branches["Muon_hit_barrel"].push_back(muon_hit_barrel[i])
-                    branches["Muon_hit_ndet"].push_back(muon_hit_ndet[i])
-                    branches["Muon_hit_layer"].push_back(muon_hit_layer[i])
+                    # branches["Muon_hit_x"].push_back(muon_hit_x[i])
+                    # branches["Muon_hit_y"].push_back(muon_hit_y[i])
+                    # branches["Muon_hit_z"].push_back(muon_hit_z[i])
+                    # branches["Muon_hit_active"].push_back(muon_hit_active[i])
+                    # branches["Muon_hit_barrel"].push_back(muon_hit_barrel[i])
+                    # branches["Muon_hit_ndet"].push_back(muon_hit_ndet[i])
+                    # branches["Muon_hit_layer"].push_back(muon_hit_layer[i])
                     branches["Muon_nExpectedPixelHits"].push_back(muon_hit_expectedhitsmultiple[i])
-                    branches["Muon_nExpectedPixelHitsSingle"].push_back(muon_hit_expectedhitssingle[i])
 
+            nmuon_passid = 0
+            nmuon_passiso = 0
             for imuon,muon in enumerate(muons):
                 pt = muon.pt()
                 eta = muon.eta()
@@ -673,26 +707,19 @@ class Looper(object):
                 branches["Muon_trk_dszError"].push_back(muon.trk_dszError())
 
                 jetIdx1 = -1
-                jetIdx2 = -1
                 drjet = -1
                 if self.do_jets:
                     # find index of jet that is closest to this muon. `sorted_etaphis`: [(index, (eta,phi)), ...]
                     sorted_etaphis = sorted(enumerate(jet_etaphis), key=lambda x: math.hypot(eta-x[1][0], phi-x[1][1]))
                     if len(sorted_etaphis) > 0: jetIdx1 = sorted_etaphis[0][0]
-                    if len(sorted_etaphis) > 1: jetIdx2 = sorted_etaphis[1][0]
                     if jetIdx1 >= 0:
                         jeteta, jetphi = sorted_etaphis[0][1]
                         drjet = math.hypot(eta-jeteta,phi-jetphi)
                 branches["Muon_drjet"].push_back(drjet)
                 branches["Muon_jetIdx1"].push_back(jetIdx1)
-                branches["Muon_jetIdx2"].push_back(jetIdx2)
-
-                metx_muoncorr -= pt*math.cos(phi)
-                mety_muoncorr -= pt*math.sin(phi)
 
                 indices = muon.vtxIndx()
                 num = len(indices)
-                # branches["Muon_vtxIndx"].push_back(indices)
                 branches["Muon_vtxNum"].push_back(num)
                 if num > 0: branches["Muon_vtxIdx1"].push_back(indices[0])
                 else: branches["Muon_vtxIdx1"].push_back(-1)
@@ -710,52 +737,86 @@ class Looper(object):
                     vz = dv.z()
                     phi = muon.phi()
                     # # https://github.com/cms-sw/cmssw/blob/master/DataFormats/TrackReco/interface/TrackBase.h#L24
-                    dxyCorr = -(vx-bsx)*math.sin(phi) + (vy-bsy)*math.cos(phi)
+                    muon.dxyCorr = -(vx-bsx)*math.sin(phi) + (vy-bsy)*math.cos(phi)
                 else:
                     # fill muon vertex branches with dummy values since there are no DVs to even look at
                     vx, vy, vz = 0, 0, 0
-                    dxyCorr = dxy
+                    muon.dxyCorr = dxy
                 branches["Muon_vx"].push_back(vx)
                 branches["Muon_vy"].push_back(vy)
                 branches["Muon_vz"].push_back(vz)
-                branches["Muon_dxyCorr"].push_back(dxyCorr)
-                # vmu = r.TLorentzVector()
-                # vmu.SetPtEtaPhiM(muon.pt(), muon.eta(), muon.phi(), 0.10566)
-                # branches["Muon_nExpectedPixelHitsCrappy"].push_back(self.calculate_module_crosses(vx,vy,vz,vmu.Px(),vmu.Py(),vmu.Pz()))
+                branches["Muon_dxyCorr"].push_back(muon.dxyCorr)
+                refx,refy,refz = get_track_reference_point(muon, vx,vy,vz)
+                branches["Muon_trk_refx"].push_back(refx)
+                branches["Muon_trk_refy"].push_back(refy)
+                branches["Muon_trk_refz"].push_back(refz)
                 if not self.has_hit_info:
                     branches["Muon_nExpectedPixelHits"].push_back(0)
-                    branches["Muon_nExpectedPixelHitsSingle"].push_back(0)
+                branches["Muon_nExcessPixelHits"].push_back(branches["Muon_nValidPixelHits"][-1]-branches["Muon_nExpectedPixelHits"][-1])
 
-                goodmuon = (
-                        (muon.trackIso() < 0.1) and
+
+                muon_passid = (
                         (muon.chi2()/muon.ndof() < 3.0) and
                         (muon.nValidMuonHits() > 0) and
-                        ((drjet < 0) or (drjet > 0.3))
+                        (muon.nTrackerLayersWithMeasurement() > 5)
                         )
-                ngoodmuon += goodmuon
-                branches["Muon_good"].push_back(goodmuon)
+                muon_passiso = (
+                        (muon.trackIso() < 0.1) 
+                        and ((drjet < 0) or (drjet > 0.3))
+                        )
+                nmuon_passid += muon_passid
+                nmuon_passiso += muon_passiso
+                branches["Muon_passid"].push_back(muon_passid)
+                branches["Muon_passiso"].push_back(muon_passiso)
             branches["nMuon"][0] = len(muons)
-            branches["nMuon_good"][0] = ngoodmuon
+            branches["nMuon_passid"][0] = nmuon_passid
+            branches["nMuon_passiso"][0] = nmuon_passiso
 
-            metpt_muoncorr = math.hypot(metx_muoncorr, mety_muoncorr)
-            metphi_muoncorr = math.atan2(mety_muoncorr, metx_muoncorr)
-            branches["MET_pt_muonCorr"][0] = metpt_muoncorr
-            branches["MET_phi_muonCorr"][0] = metphi_muoncorr
+            # some event level things if we pass a pre-selection of at least 2 muons and at least 1 dv
+            # we take the leading 2 muons and leading DV
+            if len(muons) >= 2 and len(dvs) >= 1:
+                mu1 = muons[0]
+                mu2 = muons[1]
+                dv1 = dvs[0]
+                mu1p4 = r.TLorentzVector()
+                mu2p4 = r.TLorentzVector()
+                mu1p4.SetPtEtaPhiM(mu1.pt(), mu1.eta(), mu1.phi(), 0.10566)
+                mu2p4.SetPtEtaPhiM(mu2.pt(), mu2.eta(), mu2.phi(), 0.10566)
+                dimuon = (mu1p4+mu2p4)
+                vecdv2d = r.TVector2(dv1.x()-bsx, dv1.y()-bsy)
+                vecdimuon2d = r.TVector2(dimuon.Px(),dimuon.Py())
+
+                branches["dimuon_isos"][0] = mu1.charge()*mu2.charge() < 0
+                branches["dimuon_pt"][0] = dimuon.Pt()
+                branches["dimuon_eta"][0] = dimuon.Eta()
+                branches["dimuon_phi"][0] = dimuon.Phi()
+                branches["dimuon_mass"][0] = dimuon.M()
+                branches["absdphimumu"][0] = abs(mu1p4.DeltaPhi(mu2p4))
+                branches["absdphimudv"][0] = abs(vecdimuon2d.DeltaPhi(vecdv2d))
+                branches["minabsdxy"][0] = min(abs(branches["Muon_dxyCorr"][0]),abs(branches["Muon_dxyCorr"][1]))
+                branches["logabsetaphi"][0] = math.log10(abs((mu1p4.Eta()-mu2p4.Eta())/mu1p4.DeltaPhi(mu2p4)))
+                branches["cosphi"][0] = (vecdv2d.Px()*vecdimuon2d.Px() + vecdv2d.Py()*vecdimuon2d.Py()) / (vecdv2d.Mod()*vecdimuon2d.Mod())
+
+                # now our baseline selection is
+                # *exactly* 2 muons, 1 DV, and both muons and DV pass at least ID
+                # with some kinematic cuts
+                pass_baseline = (
+                        len(muons) == 2 
+                        and len(dvs) == 1
+                        and nmuon_passid == 2
+                        and ndv_passid == 1 
+                        and (branches["cosphi"][0] > 0)
+                        and (branches["absdphimumu"][0] < 2.8)
+                        and (branches["absdphimudv"][0] < 0.02)
+                        and (branches["dimuon_isos"][0])
+                        )
+                pass_baseline_iso = (nmuon_passiso == 2) and pass_baseline
+                branches["pass_baseline"][0] = pass_baseline
+                branches["pass_baseline_iso"][0] = pass_baseline_iso
 
 
 
-            # if len(muons) >= 2:
-            #     v1 = r.TLorentzVector()
-            #     v2 = r.TLorentzVector()
-            #     v1.SetPtEtaPhiM(muons[0].pt(), muons[0].eta(), muons[0].phi(), muons[0].m())
-            #     v2.SetPtEtaPhiM(muons[1].pt(), muons[1].eta(), muons[1].phi(), muons[1].m())
-            #     branches["LeadingPair_mass"][0] = (v1+v2).M()
-            #     branches["LeadingPair_sameVtx"][0] = (branches["Muon_vtxIdx1"][0]>=0) and (branches["Muon_vtxIdx1"][0] == branches["Muon_vtxIdx1"][1])
-            #     branches["LeadingPair_isOS"][0] = (branches["Muon_charge"][0] == -branches["Muon_charge"][1])
-            # else:
-            #     branches["LeadingPair_mass"][0] = 0.
-            #     branches["LeadingPair_sameVtx"][0] = False
-            #     branches["LeadingPair_isOS"][0] = False
+
 
             self.outtree.Fill()
 
