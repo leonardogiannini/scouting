@@ -60,7 +60,6 @@ class Looper(object):
         if any("*" in x for x in fnames):
             fnames = sum(map(glob.glob,fnames),[])
         self.fnames = map(xrootdify,sum(map(lambda x:x.split(","),fnames),[]))
-        # print(self.fnames)
         self.nevents = nevents
         self.do_skimreco = not allevents
         self.do_skim1cm = skim1cm
@@ -276,7 +275,6 @@ class Looper(object):
         make_branch("DV_rho", "vf")
         make_branch("DV_rhoCorr", "vf")
         make_branch("DV_inPixelRectangles", "vb")
-        # make_branch("DV_inPixelRectanglesRough", "vb")
 
         if self.do_jets:
             make_branch("nJet", "i")
@@ -284,18 +282,6 @@ class Looper(object):
             make_branch("Jet_eta", "vf")
             make_branch("Jet_phi", "vf")
             make_branch("Jet_m", "vf")
-            # make_branch("Jet_jetArea", "vf")
-            # make_branch("Jet_maxEInEmTowers", "vf")
-            # make_branch("Jet_maxEInHadTowers", "vf")
-            # make_branch("Jet_hadEnergyInHB", "vf")
-            # make_branch("Jet_hadEnergyInHE", "vf")
-            # make_branch("Jet_hadEnergyInHF", "vf")
-            # make_branch("Jet_emEnergyInEB", "vf")
-            # make_branch("Jet_emEnergyInEE", "vf")
-            # make_branch("Jet_emEnergyInHF", "vf")
-            # make_branch("Jet_towersArea", "vf")
-            # make_branch("Jet_mvaDiscriminator", "vf")
-            # make_branch("Jet_btagDiscriminator", "vf")
 
         make_branch("nPV", "i")
         make_branch("PV_x", "vf")
@@ -374,14 +360,6 @@ class Looper(object):
         make_branch("Muon_passid", "vb")
         make_branch("Muon_passiso", "vb")
 
-        # make_branch("Muon_hit_x", "vvf")
-        # make_branch("Muon_hit_y", "vvf")
-        # make_branch("Muon_hit_z", "vvf")
-        # make_branch("Muon_hit_active", "vvb")
-        # make_branch("Muon_hit_barrel", "vvb")
-        # make_branch("Muon_hit_ndet", "vvi")
-        # make_branch("Muon_hit_layer", "vvi")
-
         make_branch("nGenPart", "i")
         make_branch("GenPart_pt", "vf")
         make_branch("GenPart_eta", "vf")
@@ -409,7 +387,6 @@ class Looper(object):
         make_branch("BS_x", "f")
         make_branch("BS_y", "f")
         make_branch("BS_z", "f")
-
 
         self.outtree.SetBasketSize("*",int(512*1024))
 
@@ -535,18 +512,6 @@ class Looper(object):
             branches["nDV"][0] = len(dvs)
             branches["nDV_passid"][0] = ndv_passid
 
-            # I think these only get calculated/written out when mass>10gev (event also fell into PFscouting stream)
-            # so most of the pv collections are size 0.
-            # However, PVM below is the set of PVs with an associated muon. That always has at least one entry.
-            # We'll store the full PVM stuff, but just the multiplicity of PV for now (PU reweighting if mass>10?). Cuts down on filesize.
-            # for pv in pvs:
-            #     branches["PV_x"].push_back(pv.x())
-            #     branches["PV_y"].push_back(pv.y())
-            #     branches["PV_z"].push_back(pv.z())
-            #     branches["PV_tracksSize"].push_back(pv.tracksSize())
-            #     branches["PV_chi2"].push_back(pv.chi2())
-            #     branches["PV_ndof"].push_back(pv.ndof())
-            #     branches["PV_isValidVtx"].push_back(pv.isValidVtx())
             branches["nPV"][0] = len(pvs)
 
             for pvm in pvms:
@@ -568,18 +533,6 @@ class Looper(object):
                     branches["Jet_eta"].push_back(jet.eta())
                     branches["Jet_phi"].push_back(jet.phi())
                     branches["Jet_m"].push_back(jet.m())
-                    # branches["Jet_jetArea"].push_back(jet.jetArea())
-                    # branches["Jet_maxEInEmTowers"].push_back(jet.maxEInEmTowers())
-                    # branches["Jet_maxEInHadTowers"].push_back(jet.maxEInHadTowers())
-                    # branches["Jet_hadEnergyInHB"].push_back(jet.hadEnergyInHB())
-                    # branches["Jet_hadEnergyInHE"].push_back(jet.hadEnergyInHE())
-                    # branches["Jet_hadEnergyInHF"].push_back(jet.hadEnergyInHF())
-                    # branches["Jet_emEnergyInEB"].push_back(jet.emEnergyInEB())
-                    # branches["Jet_emEnergyInEE"].push_back(jet.emEnergyInEE())
-                    # branches["Jet_emEnergyInHF"].push_back(jet.emEnergyInHF())
-                    # branches["Jet_towersArea"].push_back(jet.towersArea())
-                    # branches["Jet_mvaDiscriminator"].push_back(jet.mvaDiscriminator())
-                    # branches["Jet_btagDiscriminator"].push_back(jet.btagDiscriminator())
                     jet_etaphis.append((jet.eta(),jet.phi()))
                 branches["nJet"][0] = len(jets)
 
@@ -648,28 +601,10 @@ class Looper(object):
                     branches["Track_nTrackerLayersWithMeasurement"].push_back(track.tk_nTrackerLayersWithMeasurement())
                     branches["Track_nValidStripHits"].push_back(track.tk_nValidStripHits())
 
-            # metx_muoncorr = metpt*math.cos(metphi)
-            # mety_muoncorr = metpt*math.sin(metphi)
-
             if self.has_hit_info:
                 # NOTE, need to sort these to maintain same order as muons since we have sorted them by pT earlier
-                # FIXME if we somehow embedded these into the muons, that would be nicer. or use classes properly in this script...
-                # muon_hit_x = sortwitharg(evt.floatss_hitMaker_x_SLIM.product(), muon_sort_indices)
-                # muon_hit_y = sortwitharg(evt.floatss_hitMaker_y_SLIM.product(), muon_sort_indices)
-                # muon_hit_z = sortwitharg(evt.floatss_hitMaker_z_SLIM.product(), muon_sort_indices)
-                # muon_hit_layer = sortwitharg(evt.intss_hitMaker_layernum_SLIM.product(), muon_sort_indices)
-                # muon_hit_ndet = sortwitharg(evt.intss_hitMaker_ndet_SLIM.product(), muon_sort_indices)
-                # muon_hit_barrel = sortwitharg(evt.boolss_hitMaker_isbarrel_SLIM.product(), muon_sort_indices)
-                # muon_hit_active = sortwitharg(evt.boolss_hitMaker_isactive_SLIM.product(), muon_sort_indices)
                 muon_hit_expectedhitsmultiple = sortwitharg(evt.ints_hitMaker_nexpectedhitsmultiple_SLIM.product(), muon_sort_indices)
                 for i in range(len(muon_hit_expectedhitsmultiple)):
-                    # branches["Muon_hit_x"].push_back(muon_hit_x[i])
-                    # branches["Muon_hit_y"].push_back(muon_hit_y[i])
-                    # branches["Muon_hit_z"].push_back(muon_hit_z[i])
-                    # branches["Muon_hit_active"].push_back(muon_hit_active[i])
-                    # branches["Muon_hit_barrel"].push_back(muon_hit_barrel[i])
-                    # branches["Muon_hit_ndet"].push_back(muon_hit_ndet[i])
-                    # branches["Muon_hit_layer"].push_back(muon_hit_layer[i])
                     branches["Muon_nExpectedPixelHits"].push_back(muon_hit_expectedhitsmultiple[i])
 
             nmuon_passid = 0
@@ -732,11 +667,9 @@ class Looper(object):
                     if num > 0 and (0 <= indices[0] < len(dvs)):
                         idx = indices[0]
                     dv = dvs[idx]
-                    vx = dv.x()
-                    vy = dv.y()
-                    vz = dv.z()
+                    vx, vy, vz = dv.x(), dv.y(), dv.z()
                     phi = muon.phi()
-                    # # https://github.com/cms-sw/cmssw/blob/master/DataFormats/TrackReco/interface/TrackBase.h#L24
+                    # https://github.com/cms-sw/cmssw/blob/master/DataFormats/TrackReco/interface/TrackBase.h#L24
                     muon.dxyCorr = -(vx-bsx)*math.sin(phi) + (vy-bsy)*math.cos(phi)
                 else:
                     # fill muon vertex branches with dummy values since there are no DVs to even look at
@@ -809,13 +742,13 @@ class Looper(object):
                         and (branches["absdphimumu"][0] < 2.8)
                         and (branches["absdphimudv"][0] < 0.02)
                         and (branches["dimuon_isos"][0])
+                        and (branches["pass_l1"][0])
+                        and (branches["DV_rhoCorr"][0] < 11.)
+                        and (branches["pass_fiducialgen"][0])
                         )
                 pass_baseline_iso = (nmuon_passiso == 2) and pass_baseline
                 branches["pass_baseline"][0] = pass_baseline
                 branches["pass_baseline_iso"][0] = pass_baseline_iso
-
-
-
 
 
             self.outtree.Fill()
