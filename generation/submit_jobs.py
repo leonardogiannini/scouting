@@ -22,16 +22,16 @@ def submit():
 
     # Edit these parameters.
     # in total, there will be `len(masses)*len(ctaus)*events_per_point` events
-    # tag = "v1"
-    # tag = "vtest"
-    tag = "v8"
+
+    tag = "v9"
 
     events_per_point = 50000
     events_per_job = 500
-    masses = [2,5,8,10,12,15,18,20,25]
+    masses = [2,5,8,10,15,20]
     ctaus = [10,25,50]
 
-    # events_per_point = 200000
+    # # FIXME
+    # events_per_point = 50000
     # events_per_job = 500
     # masses = [20]
     # ctaus = [50]
