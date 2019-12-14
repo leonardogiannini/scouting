@@ -205,9 +205,9 @@ def plot_overlay_bpix(ax,**kwargs):
     binary_triplets = np.unpackbits(np.arange(8,dtype=np.uint8)[:,np.newaxis],1)[:,-3:].astype(int)
     step_directions = binary_triplets*2-1
     gdf = get_geometry_df("/home/users/namin/2019/scouting/repo/geometry/tracker_geometry_data2018.root")
-    expand_l = kwargs.pop("expand_l",0.1)
-    expand_w = kwargs.pop("expand_w",0.1)
-    expand_h = kwargs.pop("expand_h",0.2)
+    expand_l = kwargs.pop("expand_l",0.00)
+    expand_w = kwargs.pop("expand_w",0.00)
+    expand_h = kwargs.pop("expand_h",0.05)
     do_expand = (expand_h > 0) or (expand_w > 0) or (expand_h)
     for irow,entry in gdf.query("0 < translation_z < 8 and translation_rho<14").iterrows():
         shape = entry["shape"][1:-1].T
@@ -288,3 +288,41 @@ class LorentzVectorAccessor:
     @property
     def dimu(self):
         return self.mu1 + self.mu2
+
+smaller_dtypes = [
+    ["DV_chi2prob","float32"],
+    ["DV_ndof","int8"],
+    ["DV_redchi2","float32"],
+    ["Muon1_charge","int8"],
+    ["Muon1_excesshits","int8"],
+    ["Muon1_m","float32"],
+    ["Muon1_nExcessPixelHits","int8"],
+    ["Muon1_nExpectedPixelHits","int8"],
+    ["Muon1_nMatchedStations","int8"],
+    ["Muon1_nTrackerLayersWithMeasurement","int8"],
+    ["Muon1_nValidMuonHits","int8"],
+    ["Muon1_nValidPixelHits","int8"],
+    ["Muon1_nValidStripHits","int8"],
+    ["Muon2_charge","int8"],
+    ["Muon2_excesshits","int8"],
+    ["Muon2_m","float32"],
+    ["Muon2_nExcessPixelHits","int8"],
+    ["Muon2_nExpectedPixelHits","int8"],
+    ["Muon2_nMatchedStations","int8"],
+    ["Muon2_nTrackerLayersWithMeasurement","int8"],
+    ["Muon2_nValidMuonHits","int8"],
+    ["Muon2_nValidPixelHits","int8"],
+    ["Muon2_nValidStripHits","int8"],
+    ["categ","int8"],
+    ["luminosityBlock","int32"],
+    ["nDV","int8"],
+    ["nDV_good","int8"],
+    ["nGenMuon","int8"],
+    ["nGenPart","int16"],
+    ["nJet","int8"],
+    ["nMuon","int8"],
+    ["nMuon_good","int8"],
+    ["nPV","int8"],
+    ["nPVM","int8"],
+    ["run","int32"],
+]
