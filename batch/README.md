@@ -23,9 +23,8 @@ crab submit -c crabcfg.py General.requestName="skim_2018D_v4_unblind1fb" Data.in
   * Spam `crab status -c crab/<requestname>`, `crab resubmit -c ...`
 
 #### MC
-First, we make and store EDM RAW-tier data to make further iteration faster.
-* Submit jobs with [https://github.com/usarica/DisplacedMuons/tree/master/MCSubmission](https://github.com/usarica/DisplacedMuons/tree/master/MCSubmission) to get RAWSIM output
-* Follow the instructions for Data above without submitting any crab jobs. We will just do a local `cmsRun` to make a single file. Now the PSet is `mcproducer.py` instead of `dataproducer.py`. You will need to edit paths and maybe the global tag inside the PSet.
+* First submit jobs to generate and make RAW/scouting-tier data in the [generation folder](../generation/)
+* Once those are done, proceed to the section on making babies below.
 
 
 ### Flattened babies (non-EDM)
@@ -38,5 +37,3 @@ no skim of >=1 DV and >=2 Muon is performed (useful for MC samples where accepta
 * Edit `submit_baby_jobs.py` to have the right paths (search for "hadoop") to the crab output, including the request names, output tags, and skimming options (search for "skim")
 * `./make_tar.sh` to make the tarball for the jobs
 * `python submit_baby_jobs.py`
-* For now, this just does data. From earlier instructions MC should just be in a single file, so we run `python babymaker.py -a <filename>` locally and wait half an hour.
-
