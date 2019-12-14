@@ -13,9 +13,11 @@ import os
 import pickle
 import gzip
 
+MUON_MASS = 0.10566
+
 fast = False
 if fast:
-    print("NOTE: fast option is True, so we will skip some crucial things")
+    print(">>> [!] NOTE: fast option is True, so we will skip some crucial things")
 
 def xrootdify(fname):
     if "/hadoop/cms/store/user/namin/" in fname:
@@ -105,7 +107,7 @@ class Looper(object):
         self.has_hit_info = any("hitMaker" in name for name in branchnames)
 
         if not self.has_trigger_info:
-            print("[!] Didn't find trigger branches. Saving dummy trigger information.")
+            print(">>> [!] Didn't find trigger branches. Saving dummy trigger information.")
             self.do_trigger = False
 
         ch.SetBranchStatus("*",0)
@@ -118,11 +120,12 @@ class Looper(object):
         if self.has_trigger_info:
             ch.SetBranchStatus("*triggerMaker*",1)
         if self.has_hit_info:
-            ch.SetBranchStatus("*hitMaker*",1)
+            ch.SetBranchStatus("*hitMaker*nexpectedhitsmultiple*",1)
         if self.has_gen_info:
             ch.SetBranchStatus("*genParticles*",1)
 
         self.outfile = r.TFile(self.fname_out, "recreate")
+        # self.outfile.SetCompressionSettings(int(404)) # https://root.cern.ch/doc/master/Compression_8h_source.html
         self.outtree = r.TTree(self.treename,"")
 
         cachesize = 30000000
@@ -165,15 +168,16 @@ class Looper(object):
             # From 2018 MC with global tag of 102X_upgrade2018_realistic_v11
             self.bs_data[2018][self.is_mc] = { (0,0): [0.0107796, 0.041893, 0.0248755] }
         else:
-            print("Loading beamspot data for year={}".format(year))
+            print(">>> Loading beamspot data for year={}".format(year))
             t0 = time.time()
             data = []
-            with gzip.open("data/beamspots_{}.pkl.gz".format(year),"r") as fh:
+            # with gzip.open("data/beamspots_{}.pkl.gz".format(year),"r") as fh:
+            with open("data/beamspots_{}.pkl".format(year),"r") as fh:
                 data = pickle.load(fh)
             for run,lumi,x,y,z in data:
                 self.bs_data[year][self.is_mc][(run,lumi)] = [x,y,z]
             t1 = time.time()
-            print("Finished loading {} rows in {:.1f} seconds".format(len(data),t1-t0))
+            print(">>> Finished loading {} rows in {:.1f} seconds".format(len(data),t1-t0))
 
     def get_bs(self, run, lumi, year=2018):
         if fast: return 0., 0., 0.
@@ -184,49 +188,25 @@ class Looper(object):
         xyz = data.get((run,lumi),None)
         if xyz is None:
             xyz = data.get((0,0),[0,0,0])
-            print("WARNING: Couldn't find (run={},lumi={},is_mc={},year={}) in beamspot lookup data. Falling back to the total mean: {}".format(run,lumi,self.is_mc,year,xyz))
+            print(">>> WARNING: Couldn't find (run={},lumi={},is_mc={},year={}) in beamspot lookup data. Falling back to the total mean: {}".format(run,lumi,self.is_mc,year,xyz))
         return xyz
-
-    def in_pixel_rectangles_rough(self,x,y,z):
-        if fast: return False
-        rho = math.hypot(x,y)
-        if (rho < 2.0): return False
-        boxes = [
-            [[2.5,3.5],[-23,23]],
-            [[6.3,7.4],[-27,27]],
-            [[10.3,11.5],[-27,27]],
-            [[15.5,16.5],[-27,27]],
-            [[9,16.5],[29,33]],
-            [[9,16.5],[-33,-29]],
-            [[9,16.5],[36,39.5]],
-            [[9,16.5],[-39.5,-36]],
-        ]
-        for (rholow,rhohigh),(zlow,zhigh) in boxes:
-            if (rholow < rho < rhohigh) and (zlow < z < zhigh):
-                return True
-        return False
 
     def load_pixel_code(self):
         if not self.loaded_pixel_code:
-            print("Loading pixel utilities and lookup tables")
+            print(">>> Loading pixel utilities and lookup tables")
             t0 = time.time()
             r.gROOT.ProcessLine(".L data/calculate_pixel.cc")
             self.loaded_pixel_code = True
             t1 = time.time()
-            print("Finished loading in {:.1f} seconds".format(t1-t0))
+            print(">>> Finished loading in {:.1f} seconds".format(t1-t0))
 
     def in_pixel_rectangles(self,px,py,pz):
         if fast: return False
         self.load_pixel_code()
         rho = math.hypot(px,py)
-        if (rho < 2.0): return False
+        if (0.0 < rho < 2.4): return False
+        if (3.7 < rho < 5.7): return False
         return r.is_point_in_any_module(px, py, pz)
-
-    def calculate_module_crosses(self, vx, vy, vz, px, py, pz):
-        if fast: return False
-        self.load_pixel_code()
-        return r.calculate_module_crosses(vx, vy, vz, px, py, pz)
-
 
     def init_branches(self):
 
@@ -349,9 +329,9 @@ class Looper(object):
         make_branch("Muon_vx", "vf")
         make_branch("Muon_vy", "vf")
         make_branch("Muon_vz", "vf")
-        make_branch("Muon_trk_refx", "vf")
-        make_branch("Muon_trk_refy", "vf")
-        make_branch("Muon_trk_refz", "vf")
+        # make_branch("Muon_trk_refx", "vf")
+        # make_branch("Muon_trk_refy", "vf")
+        # make_branch("Muon_trk_refz", "vf")
         make_branch("Muon_dxyCorr", "vf")
         make_branch("Muon_nExpectedPixelHits", "vi")
         make_branch("Muon_nExcessPixelHits", "vi")
@@ -388,11 +368,15 @@ class Looper(object):
         make_branch("BS_y", "f")
         make_branch("BS_z", "f")
 
+        make_branch("L1_DoubleMu4p5_SQ_OS_dR_Max1p2", "b")
+        make_branch("L1_DoubleMu0er1p4_SQ_OS_dR_Max1p4", "b")
+        make_branch("L1_DoubleMu_15_7", "b")
+        self.seeds_to_OR = ["L1_DoubleMu4p5_SQ_OS_dR_Max1p2","L1_DoubleMu0er1p4_SQ_OS_dR_Max1p4","L1_DoubleMu_15_7"]
+
         self.outtree.SetBasketSize("*",int(512*1024))
 
     def run(self):
 
-        made_trigger_branches = False
         ch = self.ch
         branches = self.branches
         make_branch = self.make_branch
@@ -418,47 +402,34 @@ class Looper(object):
 
             dvs = evt.ScoutingVertexs_hltScoutingMuonPackerCalo_displacedVtx_HLT.product()
             if not dvs: dvs = []
+            if self.do_skimreco and (len(dvs)<1): continue
 
             muons = evt.ScoutingMuons_hltScoutingMuonPackerCalo__HLT.product()
+            if self.do_skimreco and (len(muons)<2): continue
 
-            pass_skim = (len(dvs) >= 1) and (len(muons) >= 2)
-            if self.do_skimreco and not pass_skim: continue
             if self.do_skim1cm and len(dvs) >= 1:
                 if not any(math.hypot(dv.x(),dv.y())>1. for dv in dvs): continue
-            branches["pass_skim"][0] = pass_skim
+
+            self.clear_branches()
+
+            branches["pass_skim"][0] = (len(dvs) >= 1) and (len(muons) >= 2)
             branches["pass_l1"][0] = False
 
-            pvs = evt.ScoutingVertexs_hltScoutingPrimaryVertexPacker_primaryVtx_HLT.product()
-            pvms = evt.ScoutingVertexs_hltScoutingPrimaryVertexPackerCaloMuon_primaryVtx_HLT.product()
 
             # sort muons in descending pT (turns out a nontrivial amount are not sorted already, like 5%-10% I think)
             # muons = sorted(muons, key=lambda x:-x.pt())
             muon_sort_indices, muons = argsort(muons, key=lambda x:-x.pt())
 
+
             if self.do_trigger:
-                hltresults = map(bool,evt.bools_triggerMaker_hltresult_SLIM.product())
-                hltnames = list(evt.Strings_triggerMaker_hltname_SLIM.product())
+                theOR = False
                 l1results = map(bool,evt.bools_triggerMaker_l1result_SLIM.product())
                 l1names = list(evt.Strings_triggerMaker_l1name_SLIM.product())
-                l1prescales = list(evt.ints_triggerMaker_l1prescale_SLIM.product())
-                if not made_trigger_branches:
-                    for name in hltnames:
-                        make_branch("HLT_{}".format(name), "b")
-                    for name in l1names:
-                        make_branch("{}".format(name), "b")
-                        make_branch("{}_prescale".format(name), "i")
-                    made_trigger_branches = True
-
-            self.clear_branches()
-
-            if self.do_trigger:
-                for bit,name in zip(hltresults,hltnames):
-                    branches["HLT_{}".format(name)][0] = bit
-                for bit,name,prescale in zip(l1results,l1names,l1prescales):
-                    branches["{}".format(name)][0] = bit
-                    branches["{}_prescale".format(name)][0] = max(prescale,0)
-                d = dict(zip(l1names,l1results))
-                branches["pass_l1"][0] = d["L1_DoubleMu4p5_SQ_OS_dR_Max1p2"] or d["L1_DoubleMu0er1p4_SQ_OS_dR_Max1p4"] or d["L1_DoubleMu_15_7"]
+                for bit,name in zip(l1results,l1names):
+                    if name not in self.seeds_to_OR: continue
+                    branches[name][0] = bit
+                    theOR = bit or theOR
+                branches["pass_l1"][0] = theOR
             else:
                 branches["pass_l1"][0] = True
 
@@ -512,8 +483,10 @@ class Looper(object):
             branches["nDV"][0] = len(dvs)
             branches["nDV_passid"][0] = ndv_passid
 
+            pvs = evt.ScoutingVertexs_hltScoutingPrimaryVertexPacker_primaryVtx_HLT.product()
             branches["nPV"][0] = len(pvs)
 
+            pvms = evt.ScoutingVertexs_hltScoutingPrimaryVertexPackerCaloMuon_primaryVtx_HLT.product()
             for pvm in pvms:
                 branches["PVM_x"].push_back(pvm.x())
                 branches["PVM_y"].push_back(pvm.y())
@@ -616,7 +589,7 @@ class Looper(object):
                 branches["Muon_pt"].push_back(pt)
                 branches["Muon_eta"].push_back(eta)
                 branches["Muon_phi"].push_back(phi)
-                branches["Muon_m"].push_back(0.10566) # hardcode since otherwise we get 0.
+                branches["Muon_m"].push_back(MUON_MASS) # hardcode since otherwise we get 0.
                 branches["Muon_trackIso"].push_back(muon.trackIso())
                 branches["Muon_chi2"].push_back(muon.chi2())
                 branches["Muon_ndof"].push_back(muon.ndof())
@@ -679,14 +652,13 @@ class Looper(object):
                 branches["Muon_vy"].push_back(vy)
                 branches["Muon_vz"].push_back(vz)
                 branches["Muon_dxyCorr"].push_back(muon.dxyCorr)
-                refx,refy,refz = get_track_reference_point(muon, vx,vy,vz)
-                branches["Muon_trk_refx"].push_back(refx)
-                branches["Muon_trk_refy"].push_back(refy)
-                branches["Muon_trk_refz"].push_back(refz)
+                # refx,refy,refz = get_track_reference_point(muon, vx,vy,vz)
+                # branches["Muon_trk_refx"].push_back(refx)
+                # branches["Muon_trk_refy"].push_back(refy)
+                # branches["Muon_trk_refz"].push_back(refz)
                 if not self.has_hit_info:
                     branches["Muon_nExpectedPixelHits"].push_back(0)
                 branches["Muon_nExcessPixelHits"].push_back(branches["Muon_nValidPixelHits"][-1]-branches["Muon_nExpectedPixelHits"][-1])
-
 
                 muon_passid = (
                         (muon.chi2()/muon.ndof() < 3.0) and
@@ -713,8 +685,8 @@ class Looper(object):
                 dv1 = dvs[0]
                 mu1p4 = r.TLorentzVector()
                 mu2p4 = r.TLorentzVector()
-                mu1p4.SetPtEtaPhiM(mu1.pt(), mu1.eta(), mu1.phi(), 0.10566)
-                mu2p4.SetPtEtaPhiM(mu2.pt(), mu2.eta(), mu2.phi(), 0.10566)
+                mu1p4.SetPtEtaPhiM(mu1.pt(), mu1.eta(), mu1.phi(), MUON_MASS)
+                mu2p4.SetPtEtaPhiM(mu2.pt(), mu2.eta(), mu2.phi(), MUON_MASS)
                 dimuon = (mu1p4+mu2p4)
                 vecdv2d = r.TVector2(dv1.x()-bsx, dv1.y()-bsy)
                 vecdimuon2d = r.TVector2(dimuon.Px(),dimuon.Py())
@@ -727,7 +699,7 @@ class Looper(object):
                 branches["absdphimumu"][0] = abs(mu1p4.DeltaPhi(mu2p4))
                 branches["absdphimudv"][0] = abs(vecdimuon2d.DeltaPhi(vecdv2d))
                 branches["minabsdxy"][0] = min(abs(branches["Muon_dxyCorr"][0]),abs(branches["Muon_dxyCorr"][1]))
-                branches["logabsetaphi"][0] = math.log10(abs((mu1p4.Eta()-mu2p4.Eta())/mu1p4.DeltaPhi(mu2p4)))
+                branches["logabsetaphi"][0] = math.log10(max(abs(mu1p4.Eta()-mu2p4.Eta()),1e-6)/max(abs(mu1p4.DeltaPhi(mu2p4)),1e-6))
                 branches["cosphi"][0] = (vecdv2d.Px()*vecdimuon2d.Px() + vecdv2d.Py()*vecdimuon2d.Py()) / (vecdv2d.Mod()*vecdimuon2d.Mod())
 
                 # now our baseline selection is
