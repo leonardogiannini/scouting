@@ -334,7 +334,6 @@ class Looper(object):
         # make_branch("Muon_trk_refz", "vf")
         make_branch("Muon_dxyCorr", "vf")
         make_branch("Muon_nExpectedPixelHits", "vi")
-        make_branch("Muon_nExcessPixelHits", "vi")
         make_branch("Muon_jetIdx1", "vi")
         make_branch("Muon_drjet", "vf")
         make_branch("Muon_passid", "vb")
@@ -658,7 +657,6 @@ class Looper(object):
                 # branches["Muon_trk_refz"].push_back(refz)
                 if not self.has_hit_info:
                     branches["Muon_nExpectedPixelHits"].push_back(0)
-                branches["Muon_nExcessPixelHits"].push_back(branches["Muon_nValidPixelHits"][-1]-branches["Muon_nExpectedPixelHits"][-1])
 
                 muon_passid = (
                         (muon.chi2()/muon.ndof() < 3.0) and
