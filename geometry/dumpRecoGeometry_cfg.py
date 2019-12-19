@@ -58,11 +58,12 @@ def recoGeoLoad(score):
        process.GlobalTag.globaltag = autoCond['run2_mc']
        process.load("Configuration.StandardSequences.GeometryDB_cff")
        
-    elif score == "2017":
+    elif score == "data2017":
        process.load("Configuration.StandardSequences.FrontierConditions_GlobalTag_cff")
+       from Configuration.AlCa.GlobalTag import GlobalTag
        from Configuration.AlCa.autoCond import autoCond
-       process.GlobalTag.globaltag = autoCond['upgrade2017']
-       process.load('Configuration.Geometry.GeometryExtended2017Reco_cff')
+       process.GlobalTag = GlobalTag(process.GlobalTag, '92X_dataRun2_HLT_v7', '')
+       process.load('Configuration.StandardSequences.GeometryRecoDB_cff')
 
     elif score == "mc2018":
        process.load("Configuration.StandardSequences.FrontierConditions_GlobalTag_cff")
@@ -194,7 +195,10 @@ process.add_(cms.Service("InitRootHandlers", ResetRootErrHandler = cms.untracked
 process.source = cms.Source("EmptySource")
 # NOTE IMPORTANT. Otherwise we assume Run = 1 and pick up some bad/old geometry
 # for example, was getting 3 pixel layers in barrel for 2018 instead of 4
-process.source.firstRun = cms.untracked.uint32(310000) 
+if "data2017" in options.tag:
+    process.source.firstRun = cms.untracked.uint32(302500) 
+if "data2018" in options.tag:
+    process.source.firstRun = cms.untracked.uint32(310000) 
 process.maxEvents = cms.untracked.PSet(input = cms.untracked.int32(1))
 
 recoGeoLoad(options.tag)
