@@ -52,7 +52,7 @@
 
 // for quick debugging. remove later
 // https://raw.githubusercontent.com/nlohmann/json/develop/single_include/nlohmann/json.hpp
-#include "extra/json.hpp"
+// #include "extra/json.hpp"
 
 class HitMaker : public edm::stream::EDProducer<> {
 public:
