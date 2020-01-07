@@ -11,6 +11,8 @@ import time
 import argparse
 import os
 import pickle
+
+import socket
 import gzip
 
 MUON_MASS = 0.10566
@@ -19,8 +21,9 @@ fast = False
 if fast:
     print(">>> [!] NOTE: fast option is True, so we will skip some crucial things")
 
+isuaf = any(x in socket.gethostname() for x in ["uaf-","cabinet-","sdsc-"])
 def xrootdify(fname):
-    if "/hadoop/cms/store/user/namin/" in fname:
+    if ("/hadoop/cms/store/user/namin/" in fname) and not isuaf:
         fname = "root://redirector.t2.ucsd.edu/" + fname.replace("/hadoop/cms","")
     if fname.startswith("/store"):
         fname = "root://cmsxrootd.fnal.gov/" + fname
@@ -58,7 +61,7 @@ def get_track_reference_point(muon, dvx,dvy,dvz):
 
 class Looper(object):
 
-    def __init__(self,fnames=[], output="output.root", nevents=-1, expected=-1, skim1cm=False, allevents=False, treename="Events"):
+    def __init__(self,fnames=[], output="output.root", nevents=-1, expected=-1, skim1cm=False, allevents=False, treename="Events", year=2018):
         if any("*" in x for x in fnames):
             fnames = sum(map(glob.glob,fnames),[])
         self.fnames = map(xrootdify,sum(map(lambda x:x.split(","),fnames),[]))
@@ -74,15 +77,24 @@ class Looper(object):
         self.branches = {}
         self.treename = treename
         self.fname_out = output
+        self.year = year
         self.ch = None
         self.outtree = None
         self.outfile = None
+
+        if "Run2017" in self.fnames[0]:
+            self.year = 2017
+            print(">>> Autodetected year and overrided it to {}".format(self.year))
+        if "Run2018" in self.fnames[0]:
+            self.year = 2018
+            print(">>> Autodetected year and overrided it to {}".format(self.year))
 
         # beamspot stuff - index is [year][is_mc]
         self.bs_data = { 
                 2017: {False: {}, True: {}},
                 2018: {False: {}, True: {}},
                 }
+        self.goldenjson_data = {}
 
         self.loaded_pixel_code = False
 
@@ -160,6 +172,27 @@ class Looper(object):
             if hasattr(v,"clear"):
                 v.clear()
 
+    def load_goldenjson_data(self):
+        print(">>> Loading goldenjson data")
+        t0 = time.time()
+        d = {}
+        with open("data/goldenjson_run2_snt.csv","r") as fh:
+            fh.readline() # skip header
+            for iline,line in enumerate(fh):
+                run, lumilow, lumihigh = map(int,line.split(","))
+                if run < 294927: continue # skip everything before beginning of 2017
+                if run not in d: d[run] = []
+                d[run].append((lumilow,lumihigh))
+        self.goldenjson_data = d
+        t1 = time.time()
+        print(">>> Finished loading in {:.1f} seconds".format(t1-t0))
+
+    def is_in_goldenjson(self, run, lumi):
+        if self.is_mc: return True
+        if not self.goldenjson_data:
+            self.load_goldenjson_data()
+        return any(low <= lumi <= high for low, high in self.goldenjson_data.get(run, [(0,0)]))
+
     def load_bs_data(self, year):
         if self.is_mc:
             # Events->Scan("recoBeamSpot_offlineBeamSpot__RECO.obj.x0()") in miniaod (and y0). 
@@ -218,7 +251,9 @@ class Looper(object):
 
         make_branch("pass_skim", "b")
         make_branch("pass_l1", "b")
+        make_branch("pass_json", "b")
         make_branch("pass_fiducialgen", "b")
+        make_branch("pass_excesshits", "b")
         make_branch("pass_fiducialgen_norho", "b")
 
         # more event level
@@ -231,6 +266,7 @@ class Looper(object):
         make_branch("absdphimudv", "f")
         make_branch("minabsdxy", "f")
         make_branch("logabsetaphi", "f")
+        make_branch("lxy", "f")
         make_branch("cosphi", "f")
         make_branch("pass_baseline", "b")
         make_branch("pass_baseline_iso", "b")
@@ -255,6 +291,7 @@ class Looper(object):
         make_branch("DV_rho", "vf")
         make_branch("DV_rhoCorr", "vf")
         make_branch("DV_inPixelRectangles", "vb")
+
 
         if self.do_jets:
             make_branch("nJet", "i")
@@ -368,9 +405,15 @@ class Looper(object):
         make_branch("BS_z", "f")
 
         make_branch("L1_DoubleMu4p5_SQ_OS_dR_Max1p2", "b")
+        make_branch("L1_DoubleMu4_SQ_OS_dR_Max1p2", "b")
         make_branch("L1_DoubleMu0er1p4_SQ_OS_dR_Max1p4", "b")
         make_branch("L1_DoubleMu_15_7", "b")
-        self.seeds_to_OR = ["L1_DoubleMu4p5_SQ_OS_dR_Max1p2","L1_DoubleMu0er1p4_SQ_OS_dR_Max1p4","L1_DoubleMu_15_7"]
+
+        if self.year == 2018:
+            self.seeds_to_OR =   ["L1_DoubleMu4p5_SQ_OS_dR_Max1p2","L1_DoubleMu0er1p4_SQ_OS_dR_Max1p4","L1_DoubleMu_15_7"]
+        else:
+            self.seeds_to_OR =   ["L1_DoubleMu4_SQ_OS_dR_Max1p2",  "L1_DoubleMu0er1p4_SQ_OS_dR_Max1p4","L1_DoubleMu_15_7"]
+        self.seeds_to_save = ["L1_DoubleMu4_SQ_OS_dR_Max1p2", "L1_DoubleMu4p5_SQ_OS_dR_Max1p2","L1_DoubleMu0er1p4_SQ_OS_dR_Max1p4","L1_DoubleMu_15_7"]
 
         self.outtree.SetBasketSize("*",int(512*1024))
 
@@ -425,8 +468,9 @@ class Looper(object):
                 l1results = map(bool,evt.bools_triggerMaker_l1result_SLIM.product())
                 l1names = list(evt.Strings_triggerMaker_l1name_SLIM.product())
                 for bit,name in zip(l1results,l1names):
-                    if name not in self.seeds_to_OR: continue
+                    if name not in self.seeds_to_save: continue
                     branches[name][0] = bit
+                    if name not in self.seeds_to_OR: continue
                     theOR = bit or theOR
                 branches["pass_l1"][0] = theOR
             else:
@@ -440,13 +484,15 @@ class Looper(object):
             branches["luminosityBlock"][0] = lumi
             branches["event"][0] = eventnum
 
+            branches["pass_json"][0] = self.is_in_goldenjson(run, lumi)
+
             metpt = evt.double_hltScoutingCaloPacker_caloMetPt_HLT.product()[0]
             metphi = evt.double_hltScoutingCaloPacker_caloMetPhi_HLT.product()[0]
             branches["MET_pt"][0] = metpt
             branches["MET_phi"][0] = metphi
             branches["rho"][0] = evt.double_hltScoutingCaloPacker_rho_HLT.product()[0]
 
-            bsx,bsy,bsz = self.get_bs(run=run,lumi=lumi,year=2018)
+            bsx,bsy,bsz = self.get_bs(run=run,lumi=lumi,year=self.year)
             branches["BS_x"][0] = bsx
             branches["BS_y"][0] = bsy
             branches["BS_z"][0] = bsz
@@ -521,7 +567,7 @@ class Looper(object):
             nFiducialMuon_norho = 0
             for genpart in genparts:
                 pdgid = genpart.pdgId()
-                if abs(pdgid) not in [13,23,25]: continue
+                if abs(pdgid) not in [13,23,25,6000211]: continue
                 motheridx = genpart.motherRef().index()
                 mother = genparts[motheridx]
                 motherid = mother.pdgId()
@@ -537,7 +583,7 @@ class Looper(object):
                 branches["GenPart_motherId"].push_back(motherid)
                 nGenPart += 1
                 # For the useful muons, ALSO store them in separate GenMuon branches to avoid reading a lot of extra junk
-                if (motherid == 23) and (abs(pdgid)==13): 
+                if ((motherid == 23) or (motherid == 6000211)) and (abs(pdgid)==13): 
                     branches["GenMuon_pt"].push_back(genpart.pt())
                     branches["GenMuon_eta"].push_back(genpart.eta())
                     branches["GenMuon_phi"].push_back(genpart.phi())
@@ -658,9 +704,12 @@ class Looper(object):
                 if not self.has_hit_info:
                     branches["Muon_nExpectedPixelHits"].push_back(0)
 
+                # nMatchedStations hardcoded to 0 in 2017 HLT code:
+                # https://github.com/cms-sw/cmssw/blob/CMSSW_9_2_10/HLTrigger/Muon/src/HLTScoutingMuonProducer.cc#L161
+                # and nValidMuonHits also 0, so we scrap this cut, even for 2018, for simplicity
                 muon_passid = (
                         (muon.chi2()/muon.ndof() < 3.0) and
-                        (muon.nValidMuonHits() > 0) and
+                        # (muon.nValidMuonHits() > 0) and
                         (muon.nTrackerLayersWithMeasurement() > 5)
                         )
                 muon_passiso = (
@@ -685,9 +734,14 @@ class Looper(object):
                 mu2p4 = r.TLorentzVector()
                 mu1p4.SetPtEtaPhiM(mu1.pt(), mu1.eta(), mu1.phi(), MUON_MASS)
                 mu2p4.SetPtEtaPhiM(mu2.pt(), mu2.eta(), mu2.phi(), MUON_MASS)
+                pvmx = bsx if not len(pvms) else pvms[0].x()
+                pvmy = bsy if not len(pvms) else pvms[0].y()
                 dimuon = (mu1p4+mu2p4)
                 vecdv2d = r.TVector2(dv1.x()-bsx, dv1.y()-bsy)
+                vecdv2d_pvm = r.TVector2(dv1.x()-pvmx, dv1.y()-pvmy)
                 vecdimuon2d = r.TVector2(dimuon.Px(),dimuon.Py())
+                cosphi = (vecdv2d.Px()*vecdimuon2d.Px() + vecdv2d.Py()*vecdimuon2d.Py()) / (vecdv2d.Mod()*vecdimuon2d.Mod())
+                cosphi_pvm = (vecdv2d_pvm.Px()*vecdimuon2d.Px() + vecdv2d_pvm.Py()*vecdimuon2d.Py()) / (vecdv2d_pvm.Mod()*vecdimuon2d.Mod())
 
                 branches["dimuon_isos"][0] = mu1.charge()*mu2.charge() < 0
                 branches["dimuon_pt"][0] = dimuon.Pt()
@@ -698,23 +752,36 @@ class Looper(object):
                 branches["absdphimudv"][0] = abs(vecdimuon2d.DeltaPhi(vecdv2d))
                 branches["minabsdxy"][0] = min(abs(branches["Muon_dxyCorr"][0]),abs(branches["Muon_dxyCorr"][1]))
                 branches["logabsetaphi"][0] = math.log10(max(abs(mu1p4.Eta()-mu2p4.Eta()),1e-6)/max(abs(mu1p4.DeltaPhi(mu2p4)),1e-6))
-                branches["cosphi"][0] = (vecdv2d.Px()*vecdimuon2d.Px() + vecdv2d.Py()*vecdimuon2d.Py()) / (vecdv2d.Mod()*vecdimuon2d.Mod())
+                branches["cosphi"][0] = cosphi
+                # definition on s2 of https://indico.cern.ch/event/846681/contributions/3557724/attachments/1907377/3150380/Displaced_Scouting_Status_Update.pdf
+                branches["lxy"][0] = vecdv2d_pvm.Mod() * cosphi_pvm
+
+                # both muons need to have no excess hits if the displacement is >3.5cm (otherwise we're within the 1st bpix layer and extra hits don't make sense to calculate)
+                branches["pass_excesshits"][0] = (
+                        (branches["DV_rhoCorr"][0] < 3.5) or 
+                            ( (branches["Muon_nValidPixelHits"][0] - branches["Muon_nExpectedPixelHits"][0] <= 0) and
+                              (branches["Muon_nValidPixelHits"][1] - branches["Muon_nExpectedPixelHits"][1] <= 0)
+                            )
+                        )
 
                 # now our baseline selection is
                 # *exactly* 2 muons, 1 DV, and both muons and DV pass at least ID
                 # with some kinematic cuts
                 pass_baseline = (
-                        len(muons) == 2 
-                        and len(dvs) == 1
-                        and nmuon_passid == 2
-                        and ndv_passid == 1 
+                        True
+                        and (len(muons) == 2)
+                        and (len(dvs) == 1)
+                        and (nmuon_passid == 2)
+                        and (ndv_passid == 1)
                         and (branches["cosphi"][0] > 0)
                         and (branches["absdphimumu"][0] < 2.8)
                         and (branches["absdphimudv"][0] < 0.02)
                         and (branches["dimuon_isos"][0])
                         and (branches["pass_l1"][0])
+                        and (branches["pass_json"][0])
                         and (branches["DV_rhoCorr"][0] < 11.)
                         and (branches["pass_fiducialgen"][0])
+                        and (branches["pass_excesshits"][0])
                         )
                 pass_baseline_iso = (nmuon_passiso == 2) and pass_baseline
                 branches["pass_baseline"][0] = pass_baseline
@@ -757,6 +824,7 @@ if __name__ == "__main__":
     parser.add_argument("-e", "--expected", help="expected number of events", default=-1, type=int)
     parser.add_argument(      "--skim1cm", help="require at least one DV with rho>1cm", action="store_true")
     parser.add_argument("-a", "--allevents", help="don't skim nDV>=1 && nMuon>=2", action="store_true")
+    parser.add_argument("-y", "--year", help="year (2017 or 2018)", default=2018, type=int)
     args = parser.parse_args()
 
     looper = Looper(
@@ -766,5 +834,6 @@ if __name__ == "__main__":
             expected=args.expected,
             skim1cm=args.skim1cm,
             allevents=args.allevents,
+            year=args.year,
     )
     looper.run()

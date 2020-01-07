@@ -162,16 +162,47 @@ def get_chunking(filelist, chunksize, treename="Events", workers=12, skip_bad_fi
     return chunks, nevents
 
 @functools.lru_cache(maxsize=256)
-def get_chunking_dask(filelist, chunksize, client=None, treename="Events"):
-    import uproot
+def get_chunking_dask(filelist, chunksize, client=None, treename="Events",skip_bad_files=False, xrootd=False):
+    if not client:
+        from dask.distributed import get_client
+        client = get_client()
+
+    if xrootd:
+        filelist = [fname.replace("/hadoop/cms","root://redirector.t2.ucsd.edu/") for fname in filelist]
     chunks, chunksize, nevents = [], int(chunksize), 0
-    info = client.gather(client.map(lambda x:(x,uproot.numentries(x,treename)), filelist))
+    def numentries(fname):
+        import uproot
+        try:
+            return (fname,uproot.numentries(fname,treename))
+        except:
+            return (fname,-1)
+    info = client.gather(client.map(numentries, filelist))
     for fn, nentries in info:
+        if nentries < 0:
+            if skip_bad_files:
+                print("Skipping bad file: {}".format(fn))
+                continue
+            else: raise RuntimeError("Bad file: {}".format(fn))
         nevents += nentries
         for index in range(nentries // chunksize + 1):
             chunks.append((fn, chunksize*index, min(chunksize*(index+1), nentries)))
     return chunks, nevents
 
+def dask_hist2d(df, x, y, bins):
+    """
+    np.histogram2d from dask dataframe
+
+    Examples
+    --------
+    >>> bins = [np.linspace(-15,15,200),np.linspace(-15,15,200)]
+    >>> dask_hist2d(df, x="DV_x", y="DV_y", bins=bins).compute()
+    """
+    @delayed
+    def f(df, bins):
+        return np.histogram2d(df[kx],df[ky], bins=bins)[0]
+    # do we want delayed(sum) or just sum?
+    bins = delayed(bins)
+    return sum(f(obj, bins) for obj in df.to_delayed())
 
 def get_geometry_df(fname):
     """
@@ -204,7 +235,8 @@ def plot_overlay_bpix(ax,**kwargs):
     color = kwargs.pop("color","k")
     binary_triplets = np.unpackbits(np.arange(8,dtype=np.uint8)[:,np.newaxis],1)[:,-3:].astype(int)
     step_directions = binary_triplets*2-1
-    gdf = get_geometry_df("/home/users/namin/2019/scouting/repo/geometry/tracker_geometry_data2018.root")
+    geometryfile = kwargs.pop("geometryfile","/home/users/namin/2019/scouting/repo/geometry/tracker_geometry_data2018.root")
+    gdf = get_geometry_df(geometryfile)
     expand_l = kwargs.pop("expand_l",0.00)
     expand_w = kwargs.pop("expand_w",0.00)
     expand_h = kwargs.pop("expand_h",0.05)
@@ -224,6 +256,34 @@ def plot_overlay_bpix(ax,**kwargs):
         points = points[np.array([6,2,1,5,6])]
         ax.plot(points[:,0],points[:,1],color=color,**kwargs)
     return ax
+
+def futures_widget(futures):
+    """
+    Takes a list of futures and returns a jupyter widget object of squares,
+    one per future, which turn green or red on success or failure
+    """
+    import ipywidgets
+    import toolz
+    def make_button(future):
+        button = ipywidgets.Button(
+            description='',
+            disabled=False,
+            button_style='', # 'success', 'info', 'warning', 'danger' or ''
+            tooltip='',
+            layout=ipywidgets.Layout(width='20px', height='20px'),
+        )
+        def callback(f):
+            if f.exception():
+                button.button_style = "danger"
+            else:
+                button.button_style = "success"
+        future.add_done_callback(callback)
+        return button
+
+    items = [make_button(future) for future in futures]
+
+    box = ipywidgets.VBox([ipywidgets.HBox(row) for row in toolz.itertoolz.partition(30, items)])
+    return box
 
 @pd.api.extensions.register_dataframe_accessor("tree")
 class TreeLikeAccessor:

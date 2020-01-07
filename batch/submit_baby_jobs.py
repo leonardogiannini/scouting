@@ -4,7 +4,9 @@ from metis.Sample import DirectorySample, DBSSample
 from metis.StatsParser import StatsParser
 from metis.Optimizer import Optimizer
 import time
+from pprint import pprint
 import glob
+import sys
 
 extra_requirements = "True"
 blacklisted_machines = [
@@ -30,7 +32,7 @@ def get_tasks(infos):
             batchname = dataset.split("_",1)[-1].split("/")[0]+"_"+tag
         else:
             kwargs["files_per_output"] = 1e5
-            batchname = "_".join(location.split("params_",1)[1].split("_")[:2] + [tag])
+            batchname = "_".join(dataset.split("params_",1)[1].split("/",1)[0].split("_")[:2] + [tag])
         task = CondorTask(
                 sample = DirectorySample(location=location,dataset=dataset),
                 output_name = "output.root",
@@ -99,10 +101,14 @@ if __name__ == "__main__":
     infos.extend([
             dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018C_v9_unblind1fb/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018C_v9_unblind1fb/RAW", tag="v10", isdata=True, extra_args=""),
             dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018C_v9_unblind1fb/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018C_v9_unblind1fb/RAW", tag="v10skim1cm", isdata=True, extra_args="--skim1cm"),
+
+            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018C_v9/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018C_v9/RAW", tag="v10", isdata=True, extra_args=""),
+            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017D_v9/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017D_v9/RAW", tag="v10", isdata=True, extra_args="--year 2017"),
             ])
 
     # MC
-    locations = glob.glob("/hadoop/cms/store/user/namin/ProjectMetis/HToZdZdTo2Mu2X_params_mzd20_ctau50mm_RAWSIM_v9/")
+    # locations = glob.glob("/hadoop/cms/store/user/namin/ProjectMetis/HToZdZdTo2Mu2X_params_mzd20_ctau50mm_RAWSIM_v9/")
+    locations = glob.glob("/hadoop/cms/store/user/namin/ProjectMetis/HToZdZdTo2Mu2X_params_mzd*_ctau*mm_RAWSIM_v9/")
     for location in locations:
         taskname = location.rstrip("/").rsplit("/")[-1]
         dataset = "/{}/{}/BABY".format(
@@ -110,8 +116,17 @@ if __name__ == "__main__":
                 taskname.split("_",1)[1].split("_RAWSIM")[0],
                 )
         infos.append(dict(location=location, dataset=dataset, isdata=False, tag="v10"))
+
+    infos.append(dict(
+        location="/hadoop/cms/store/user/namin/DisplacedMuons/2017/DirectGluonFusion_PhiToMuMu/ggPhimumu_Phimass2_Phictau0_5_part1/",
+        dataset="/GGPhiToMuMu/params_mphi2_ctau0p5mm/BABY",
+        isdata=False,
+        tag="v10",
+        extra_args="--year 2017",
+        ))
         
     # pprint(infos,width=200)
+    # sys.exit()
 
     tasks = get_tasks(infos)
 

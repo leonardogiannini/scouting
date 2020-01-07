@@ -1,5 +1,16 @@
 import FWCore.ParameterSet.Config as cms
 
+import FWCore.ParameterSet.VarParsing as VarParsing
+opts = VarParsing.VarParsing('python')
+vpbool = VarParsing.VarParsing.varType.bool
+vpint = VarParsing.VarParsing.varType.int
+vpstring = VarParsing.VarParsing.varType.string
+opts.register('data'    , True  , mytype=vpbool)
+opts.register('era'    , "2018A"  , mytype=vpstring)
+opts.register('inputs'    , ""  , mytype=vpstring) # comma separated list of input files
+opts.register('nevents'    , -1  , mytype=vpint)
+opts.parseArguments()
+
 process = cms.Process('SLIM')
 
 # import of standard configurations
@@ -15,13 +26,27 @@ process.load('Configuration.StandardSequences.MagneticField_AutoFromDBCurrent_cf
 
 ## ----------------- Global Tag ------------------
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_condDBv2_cff')
-process.GlobalTag.globaltag = "101X_dataRun2_HLT_v7" # from edmProvDump, used for 2018A,B,C,D
-# 92X_dataRun2_HLT_v4 for 2017C, and 92X_dataRun2_HLT_v7 for 2017D,E,F
-# process.GlobalTag.globaltag = "102X_upgrade2018_realistic_v15"
+
+gtags = {
+        "2017C": "92X_dataRun2_HLT_v4",
+        "2017D": "92X_dataRun2_HLT_v7",
+        "2017E": "92X_dataRun2_HLT_v7",
+        "2017F": "92X_dataRun2_HLT_v7",
+        "2018A": "102X_upgrade2018_realistic_v15",
+        "2018B": "102X_upgrade2018_realistic_v15",
+        "2018C": "102X_upgrade2018_realistic_v15",
+        "2018D": "102X_upgrade2018_realistic_v15",
+        }
+
+if opts.era not in gtags.keys():
+    raise RuntimeError("Invalid era. Must be one of: {}".format(sorted(gtag.keys())))
+
+print("Using {}".format(gtags[opts.era]))
+process.GlobalTag.globaltag = gtags[opts.era]
 
 process.maxEvents = cms.untracked.PSet(
     # input = cms.untracked.int32(-1)
-    input = cms.untracked.int32(20000)
+    input = cms.untracked.int32(opts.nevents)
 )
 process.MessageLogger.cerr.FwkReport.reportEvery = 5000
 process.MessageLogger.suppressWarning = cms.untracked.vstring(["MeasurementTrackerEvent"])
@@ -38,6 +63,10 @@ process.source = cms.Source("PoolSource",
         'drop *_hltScoutingTrackPacker_*_*', 
     ),
 )
+
+if len(opts.inputs):
+    process.source.fileNames = opts.inputs.split(",")
+
 do_skim = True
 
 process.out = cms.OutputModule("PoolOutputModule",
@@ -85,24 +114,26 @@ L1Info = ["L1_DoubleMu0", "L1_DoubleMu0_Mass_Min1", "L1_DoubleMu0_OQ",
  "L1_DoubleMu4p5_SQ_OS_dR_Max1p2", "L1_DoubleMu4p5er2p0_SQ_OS",
  "L1_DoubleMu4p5er2p0_SQ_OS_Mass7to18", "L1_DoubleMu9_SQ", "L1_DoubleMu_12_5",
  "L1_DoubleMu_15_5_SQ", "L1_DoubleMu_15_7", "L1_DoubleMu_15_7_Mass_Min1",
- "L1_DoubleMu_15_7_SQ", "L1_QuadMu0", "L1_QuadMu0_OQ", "L1_QuadMu0_SQ",
- "L1_TripleMu0", "L1_TripleMu0_OQ", "L1_TripleMu0_SQ", "L1_TripleMu3",
- "L1_TripleMu3_SQ", "L1_TripleMu_5SQ_3SQ_0OQ",
- "L1_TripleMu_5SQ_3SQ_0OQ_DoubleMu_5_3_SQ_OS_Mass_Max9",
- "L1_TripleMu_5SQ_3SQ_0_DoubleMu_5_3_SQ_OS_Mass_Max9", "L1_TripleMu_5_3_3",
- "L1_TripleMu_5_3_3_SQ", "L1_TripleMu_5_3p5_2p5",
- "L1_TripleMu_5_3p5_2p5_DoubleMu_5_2p5_OS_Mass_5to17",
- "L1_TripleMu_5_3p5_2p5_OQ_DoubleMu_5_2p5_OQ_OS_Mass_5to17",
- "L1_TripleMu_5_4_2p5_DoubleMu_5_2p5_OS_Mass_5to17", "L1_TripleMu_5_5_3",
- "L1_ZeroBias"]
+ "L1_DoubleMu_15_7_SQ",
+ # "L1_QuadMu0", "L1_QuadMu0_OQ", "L1_QuadMu0_SQ",
+ # "L1_TripleMu0", "L1_TripleMu0_OQ", "L1_TripleMu0_SQ", "L1_TripleMu3",
+ # "L1_TripleMu3_SQ", "L1_TripleMu_5SQ_3SQ_0OQ",
+ # "L1_TripleMu_5SQ_3SQ_0OQ_DoubleMu_5_3_SQ_OS_Mass_Max9",
+ # "L1_TripleMu_5SQ_3SQ_0_DoubleMu_5_3_SQ_OS_Mass_Max9", "L1_TripleMu_5_3_3",
+ # "L1_TripleMu_5_3_3_SQ", "L1_TripleMu_5_3p5_2p5",
+ # "L1_TripleMu_5_3p5_2p5_DoubleMu_5_2p5_OS_Mass_5to17",
+ # "L1_TripleMu_5_3p5_2p5_OQ_DoubleMu_5_2p5_OQ_OS_Mass_5to17",
+ # "L1_TripleMu_5_4_2p5_DoubleMu_5_2p5_OS_Mass_5to17", "L1_TripleMu_5_5_3",
+ # "L1_ZeroBias"
+ ]
 
 HLTInfo = [
-           ['CaloJet40_CaloBTagScouting',        'DST_CaloJet40_CaloBTagScouting_v*'],
-           ['CaloScoutingHT250',                 'DST_HT250_CaloScouting_v*'],
-           ['CaloBTagScoutingHT250',             'DST_HT250_CaloBTagScouting_v*'],
-           ['CaloBTagScoutingL1HTT',             'DST_L1HTT_CaloBTagScouting_v*'],
-           ['ZeroBias_CaloScouting_PFScouting',  'DST_ZeroBias_CaloScouting_PFScouting_v*'],
-           ['DoubleMu1_noVtx',                   'DST_DoubleMu1_noVtx_CaloScouting_v*'],
+           # ['CaloJet40_CaloBTagScouting',        'DST_CaloJet40_CaloBTagScouting_v*'],
+           # ['CaloScoutingHT250',                 'DST_HT250_CaloScouting_v*'],
+           # ['CaloBTagScoutingHT250',             'DST_HT250_CaloBTagScouting_v*'],
+           # ['CaloBTagScoutingL1HTT',             'DST_L1HTT_CaloBTagScouting_v*'],
+           # ['ZeroBias_CaloScouting_PFScouting',  'DST_ZeroBias_CaloScouting_PFScouting_v*'],
+           # ['DoubleMu1_noVtx',                   'DST_DoubleMu1_noVtx_CaloScouting_v*'],
            ['DoubleMu3_noVtx',                   'DST_DoubleMu3_noVtx_CaloScouting_v*'],
            ['DoubleMu3_noVtx_Monitoring',        'DST_DoubleMu3_noVtx_CaloScouting_Monitoring_v*'],
            ]

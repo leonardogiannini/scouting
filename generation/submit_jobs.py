@@ -28,7 +28,7 @@ def submit():
     events_per_point = 50000
     events_per_job = 500
     masses = [2,5,8,10,15,20]
-    ctaus = [10,25,50]
+    ctaus = [1,5,10,25,50]
 
     # # FIXME
     # events_per_point = 50000
