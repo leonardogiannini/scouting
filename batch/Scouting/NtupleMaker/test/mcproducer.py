@@ -7,9 +7,11 @@ vpint = VarParsing.VarParsing.varType.int
 vpstring = VarParsing.VarParsing.varType.string
 opts.register('data'    , False  , mytype=vpbool)
 opts.register('era'    , "2018A"  , mytype=vpstring)
+opts.register('output'    , "output.root"  , mytype=vpstring)
 opts.register('inputs'    , ""  , mytype=vpstring) # comma separated list of input files
 opts.register('nevents'    , -1  , mytype=vpint)
 opts.parseArguments()
+
 process = cms.Process('SLIM')
 
 # import of standard configurations
@@ -39,14 +41,14 @@ process.maxEvents = cms.untracked.PSet(
 process.MessageLogger.cerr.FwkReport.reportEvery = 2000
 process.MessageLogger.suppressWarning = cms.untracked.vstring(["MeasurementTrackerEvent"])
 
-fnames = []
-try:
-    import glob
-    # fnames = glob.glob("/hadoop/cms/store/user/namin/DisplacedMuons/2018/GluGluTo0PHH125ToZprimeZprimeTo2Mu2X_CTauVprime_50mm/PREMIX-RAWSIM/*.root")
-    fnames = glob.glob("rutgersmc/*.root")
-    fnames = ["file:"+fname for fname in fnames]
-except:
-    pass
+# fnames = []
+# try:
+#     import glob
+#     # fnames = glob.glob("/hadoop/cms/store/user/namin/DisplacedMuons/2018/GluGluTo0PHH125ToZprimeZprimeTo2Mu2X_CTauVprime_50mm/PREMIX-RAWSIM/*.root")
+#     fnames = glob.glob("rutgersmc/*.root")
+#     fnames = ["file:"+fname for fname in fnames]
+# except:
+#     pass
 
 # Input source
 process.source = cms.Source("PoolSource",
@@ -175,13 +177,17 @@ process.hitMaker = cms.EDProducer("HitMaker",
         measurementTrackerEventInputTag = cms.InputTag("MeasurementTrackerEvent"),
         )
 
+process.beamSpotMaker = cms.EDProducer("BeamSpotMaker")
+
 from RecoTracker.MeasurementDet.measurementTrackerEventDefault_cfi import measurementTrackerEventDefault as _measurementTrackerEventDefault
 process.MeasurementTrackerEvent = _measurementTrackerEventDefault.clone()
 
 process.load("EventFilter.L1TRawToDigi.gtStage2Digis_cfi")
 process.gtStage2Digis.InputLabel = cms.InputTag( "hltFEDSelectorL1" )
 
+process.offlineBeamSpot = cms.EDProducer("BeamSpotProducer")
+
 if do_skim:
-    process.skimpath = cms.Path(process.countmu * process.countvtx * process.gtStage2Digis * process.triggerMaker * process.MeasurementTrackerEvent * process.hitMaker)
+    process.skimpath = cms.Path(process.countmu * process.countvtx * process.gtStage2Digis * process.offlineBeamSpot * process.beamSpotMaker * process.triggerMaker * process.MeasurementTrackerEvent * process.hitMaker)
 else:
-    process.skimpath = cms.Path(process.gtStage2Digis * process.triggerMaker * process.MeasurementTrackerEvent * process.hitMaker)
+    process.skimpath = cms.Path(process.gtStage2Digis * process.offlineBeamSpot * process.beamSpotMaker * process.triggerMaker * process.MeasurementTrackerEvent * process.hitMaker)

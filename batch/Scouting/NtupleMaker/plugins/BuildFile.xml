@@ -11,6 +11,7 @@
     <use name="DataFormats/PatCandidates"/>
     <use name="DataFormats/Scouting"/>
     <use name="DataFormats/VertexReco"/>
+    <use name="DataFormats/BeamSpot"/>
     <use name="FWCore/Framework"/>
     <use name="FWCore/MessageLogger"/>
     <use name="FWCore/PluginManager"/>
