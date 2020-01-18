@@ -33,10 +33,10 @@ gtags = {
         "2017D": "92X_dataRun2_HLT_v7",
         "2017E": "92X_dataRun2_HLT_v7",
         "2017F": "92X_dataRun2_HLT_v7",
-        "2018A": "102X_upgrade2018_realistic_v15",
-        "2018B": "102X_upgrade2018_realistic_v15",
-        "2018C": "102X_upgrade2018_realistic_v15",
-        "2018D": "102X_upgrade2018_realistic_v15",
+        "2018A": "101X_dataRun2_HLT_v7",
+        "2018B": "101X_dataRun2_HLT_v7",
+        "2018C": "101X_dataRun2_HLT_v7",
+        "2018D": "101X_dataRun2_HLT_v7",
         }
 
 if opts.era not in gtags.keys():

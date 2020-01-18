@@ -12,6 +12,8 @@ BeamSpotMaker::BeamSpotMaker(const edm::ParameterSet& iConfig) {
   produces<float>("x").setBranchAlias("x");
   produces<float>("y").setBranchAlias("y");
   produces<float>("z").setBranchAlias("z");
+  produces<float>("dxdz").setBranchAlias("dxdz");
+  produces<float>("dydz").setBranchAlias("dydz");
 }
 
 BeamSpotMaker::~BeamSpotMaker(){}
@@ -24,6 +26,8 @@ void BeamSpotMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
   unique_ptr<float> x(new float);
   unique_ptr<float> y(new float);
   unique_ptr<float> z(new float);
+  unique_ptr<float> dxdz(new float);
+  unique_ptr<float> dydz(new float);
 
   edm::Handle<reco::BeamSpot> beamSpotH;
   iEvent.getByToken(beamSpotToken, beamSpotH);
@@ -35,10 +39,14 @@ void BeamSpotMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
   *x = beamSpotH->position().x();
   *y = beamSpotH->position().y();
   *z = beamSpotH->position().z();
+  *dxdz = beamSpotH->dxdz();
+  *dydz = beamSpotH->dydz();
 
   iEvent.put(std::move(x), "x");
   iEvent.put(std::move(y), "y");
   iEvent.put(std::move(z), "z");
+  iEvent.put(std::move(dxdz), "dxdz");
+  iEvent.put(std::move(dydz), "dydz");
 }
 
 DEFINE_FWK_MODULE(BeamSpotMaker);
