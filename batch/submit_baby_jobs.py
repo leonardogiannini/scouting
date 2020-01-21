@@ -11,6 +11,7 @@ import sys
 extra_requirements = "True"
 blacklisted_machines = [
          "cabinet-4-4-29.t2.ucsd.edu",
+         "cabinet-4-4-18.t2.ucsd.edu",
          "cabinet-7-7-36.t2.ucsd.edu",
          "cabinet-8-8-1.t2.ucsd.edu",
          "sdsc-37.t2.ucsd.edu",
@@ -99,11 +100,22 @@ if __name__ == "__main__":
 
     # DATA
     infos.extend([
-            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018C_v9_unblind1fb/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018C_v9_unblind1fb/RAW", tag="v10", isdata=True, extra_args=""),
-            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018C_v9_unblind1fb/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018C_v9_unblind1fb/RAW", tag="v10skim1cm", isdata=True, extra_args="--skim1cm"),
 
-            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018C_v9/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018C_v9/RAW", tag="v10", isdata=True, extra_args=""),
-            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017D_v9/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017D_v9/RAW", tag="v10", isdata=True, extra_args="--year 2017"),
+            # dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018C_v9_unblind1fb/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018C_v9_unblind1fb/RAW", tag="v10", isdata=True, extra_args=""),
+            # dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018C_v9_unblind1fb/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018C_v9_unblind1fb/RAW", tag="v10skim1cm", isdata=True, extra_args="--skim1cm"),
+            # dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018C_v9/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018C_v9/RAW", tag="v10", isdata=True, extra_args=""),
+            # dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017D_v9/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017D_v9/RAW", tag="v10", isdata=True, extra_args="--year 2017"),
+
+            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018C_v11_unblind1fb/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018C_v11_unblind1fb/RAW", tag="v11", isdata=True, extra_args=""),
+            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018A_v11/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018A_v11/RAW", tag="v11", isdata=True, extra_args=""),
+            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018B_v11/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018B_v11/RAW", tag="v11", isdata=True, extra_args=""),
+            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018C_v11/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018C_v11/RAW", tag="v11", isdata=True, extra_args=""),
+            # dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018D_v11/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018D_v11/RAW", tag="v11", isdata=True, extra_args=""),
+            # dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017C_v11/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017C_v11/RAW", tag="v11", isdata=True, extra_args="--year 2017"),
+            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017D_v11/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017D_v11/RAW", tag="v11", isdata=True, extra_args="--year 2017"),
+            # dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017E_v11/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017E_v11/RAW", tag="v11", isdata=True, extra_args="--year 2017"),
+            # dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017F_v11/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017F_v11/RAW", tag="v11", isdata=True, extra_args="--year 2017"),
+
             ])
 
     # MC

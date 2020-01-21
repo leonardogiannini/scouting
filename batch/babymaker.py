@@ -117,6 +117,7 @@ class Looper(object):
         self.is_mc = self.has_gen_info
         self.has_trigger_info = any("triggerMaker" in name for name in branchnames)
         self.has_hit_info = any("hitMaker" in name for name in branchnames)
+        self.has_bs_info = any("beamSpotMaker" in name for name in branchnames)
 
         if not self.has_trigger_info:
             print(">>> [!] Didn't find trigger branches. Saving dummy trigger information.")
@@ -135,6 +136,8 @@ class Looper(object):
             ch.SetBranchStatus("*hitMaker*nexpectedhitsmultiple*",1)
         if self.has_gen_info:
             ch.SetBranchStatus("*genParticles*",1)
+        if self.has_bs_info:
+            ch.SetBranchStatus("*beamSpotMaker*",1)
 
         self.outfile = r.TFile(self.fname_out, "recreate")
         # self.outfile.SetCompressionSettings(int(404)) # https://root.cern.ch/doc/master/Compression_8h_source.html
@@ -403,6 +406,8 @@ class Looper(object):
         make_branch("BS_x", "f")
         make_branch("BS_y", "f")
         make_branch("BS_z", "f")
+        make_branch("BS_dxdz", "f")
+        make_branch("BS_dydz", "f")
 
         make_branch("L1_DoubleMu4p5_SQ_OS_dR_Max1p2", "b")
         make_branch("L1_DoubleMu4_SQ_OS_dR_Max1p2", "b")
@@ -415,7 +420,7 @@ class Looper(object):
             self.seeds_to_OR =   ["L1_DoubleMu4_SQ_OS_dR_Max1p2",  "L1_DoubleMu0er1p4_SQ_OS_dR_Max1p4","L1_DoubleMu_15_7"]
         self.seeds_to_save = ["L1_DoubleMu4_SQ_OS_dR_Max1p2", "L1_DoubleMu4p5_SQ_OS_dR_Max1p2","L1_DoubleMu0er1p4_SQ_OS_dR_Max1p4","L1_DoubleMu_15_7"]
 
-        self.outtree.SetBasketSize("*",int(512*1024))
+        self.outtree.SetBasketSize("*",int(1*1024*1024))
 
     def run(self):
 
@@ -457,11 +462,9 @@ class Looper(object):
             branches["pass_skim"][0] = (len(dvs) >= 1) and (len(muons) >= 2)
             branches["pass_l1"][0] = False
 
-
             # sort muons in descending pT (turns out a nontrivial amount are not sorted already, like 5%-10% I think)
             # muons = sorted(muons, key=lambda x:-x.pt())
             muon_sort_indices, muons = argsort(muons, key=lambda x:-x.pt())
-
 
             if self.do_trigger:
                 theOR = False
@@ -484,7 +487,8 @@ class Looper(object):
             branches["luminosityBlock"][0] = lumi
             branches["event"][0] = eventnum
 
-            branches["pass_json"][0] = self.is_in_goldenjson(run, lumi)
+            # branches["pass_json"][0] = self.is_in_goldenjson(run, lumi)
+            branches["pass_json"][0] = True # started requiring golden upstream
 
             metpt = evt.double_hltScoutingCaloPacker_caloMetPt_HLT.product()[0]
             metphi = evt.double_hltScoutingCaloPacker_caloMetPhi_HLT.product()[0]
@@ -492,10 +496,34 @@ class Looper(object):
             branches["MET_phi"][0] = metphi
             branches["rho"][0] = evt.double_hltScoutingCaloPacker_rho_HLT.product()[0]
 
-            bsx,bsy,bsz = self.get_bs(run=run,lumi=lumi,year=self.year)
+            if self.has_bs_info:
+                bsx = float(evt.float_beamSpotMaker_x_SLIM.product()[0])
+                bsy = float(evt.float_beamSpotMaker_y_SLIM.product()[0])
+                bsz = float(evt.float_beamSpotMaker_z_SLIM.product()[0])
+                bsdxdz = float(evt.float_beamSpotMaker_dxdz_SLIM.product()[0])
+                bsdydz = float(evt.float_beamSpotMaker_dydz_SLIM.product()[0])
+            else:
+                bsx,bsy,bsz = self.get_bs(run=run,lumi=lumi,year=self.year)
+                bsdxdz, bsdydz = 0., 0.
             branches["BS_x"][0] = bsx
             branches["BS_y"][0] = bsy
             branches["BS_z"][0] = bsz
+            branches["BS_dxdz"][0] = bsdxdz
+            branches["BS_dydz"][0] = bsdydz
+
+            # NOTE, we correct x-y quantities using first PV from this collection
+            pvms = evt.ScoutingVertexs_hltScoutingPrimaryVertexPackerCaloMuon_primaryVtx_HLT.product()
+            for pvm in pvms:
+                branches["PVM_x"].push_back(pvm.x())
+                branches["PVM_y"].push_back(pvm.y())
+                branches["PVM_z"].push_back(pvm.z())
+                branches["PVM_tracksSize"].push_back(pvm.tracksSize())
+                branches["PVM_chi2"].push_back(pvm.chi2())
+                branches["PVM_ndof"].push_back(pvm.ndof())
+                branches["PVM_isValidVtx"].push_back(pvm.isValidVtx())
+            branches["nPVM"][0] = len(pvms)
+            pvmx = bsx if not len(pvms) else pvms[0].x()
+            pvmy = bsy if not len(pvms) else pvms[0].y()
 
             ndv_passid = 0
             for dv in dvs:
@@ -503,7 +531,7 @@ class Looper(object):
                 vy = dv.y()
                 vz = dv.z()
                 rho = (vx**2 + vy**2)**0.5
-                rhoCorr = ((vx-bsx)**2 + (vy-bsy)**2)**0.5
+                rhoCorr = ((vx-pvmx)**2 + (vy-pvmy)**2)**0.5
                 branches["DV_x"].push_back(vx)
                 branches["DV_y"].push_back(vy)
                 branches["DV_z"].push_back(vz)
@@ -531,16 +559,6 @@ class Looper(object):
             pvs = evt.ScoutingVertexs_hltScoutingPrimaryVertexPacker_primaryVtx_HLT.product()
             branches["nPV"][0] = len(pvs)
 
-            pvms = evt.ScoutingVertexs_hltScoutingPrimaryVertexPackerCaloMuon_primaryVtx_HLT.product()
-            for pvm in pvms:
-                branches["PVM_x"].push_back(pvm.x())
-                branches["PVM_y"].push_back(pvm.y())
-                branches["PVM_z"].push_back(pvm.z())
-                branches["PVM_tracksSize"].push_back(pvm.tracksSize())
-                branches["PVM_chi2"].push_back(pvm.chi2())
-                branches["PVM_ndof"].push_back(pvm.ndof())
-                branches["PVM_isValidVtx"].push_back(pvm.isValidVtx())
-            branches["nPVM"][0] = len(pvms)
 
             if self.do_jets:
                 jets = evt.ScoutingCaloJets_hltScoutingCaloPacker__HLT.product()
@@ -688,7 +706,7 @@ class Looper(object):
                     vx, vy, vz = dv.x(), dv.y(), dv.z()
                     phi = muon.phi()
                     # https://github.com/cms-sw/cmssw/blob/master/DataFormats/TrackReco/interface/TrackBase.h#L24
-                    muon.dxyCorr = -(vx-bsx)*math.sin(phi) + (vy-bsy)*math.cos(phi)
+                    muon.dxyCorr = -(vx-pvmx)*math.sin(phi) + (vy-pvmy)*math.cos(phi)
                 else:
                     # fill muon vertex branches with dummy values since there are no DVs to even look at
                     vx, vy, vz = 0, 0, 0
@@ -734,14 +752,10 @@ class Looper(object):
                 mu2p4 = r.TLorentzVector()
                 mu1p4.SetPtEtaPhiM(mu1.pt(), mu1.eta(), mu1.phi(), MUON_MASS)
                 mu2p4.SetPtEtaPhiM(mu2.pt(), mu2.eta(), mu2.phi(), MUON_MASS)
-                pvmx = bsx if not len(pvms) else pvms[0].x()
-                pvmy = bsy if not len(pvms) else pvms[0].y()
                 dimuon = (mu1p4+mu2p4)
-                vecdv2d = r.TVector2(dv1.x()-bsx, dv1.y()-bsy)
-                vecdv2d_pvm = r.TVector2(dv1.x()-pvmx, dv1.y()-pvmy)
+                vecdv2d = r.TVector2(dv1.x()-pvmx, dv1.y()-pvmy)
                 vecdimuon2d = r.TVector2(dimuon.Px(),dimuon.Py())
                 cosphi = (vecdv2d.Px()*vecdimuon2d.Px() + vecdv2d.Py()*vecdimuon2d.Py()) / (vecdv2d.Mod()*vecdimuon2d.Mod())
-                cosphi_pvm = (vecdv2d_pvm.Px()*vecdimuon2d.Px() + vecdv2d_pvm.Py()*vecdimuon2d.Py()) / (vecdv2d_pvm.Mod()*vecdimuon2d.Mod())
 
                 branches["dimuon_isos"][0] = mu1.charge()*mu2.charge() < 0
                 branches["dimuon_pt"][0] = dimuon.Pt()
@@ -754,7 +768,10 @@ class Looper(object):
                 branches["logabsetaphi"][0] = math.log10(max(abs(mu1p4.Eta()-mu2p4.Eta()),1e-6)/max(abs(mu1p4.DeltaPhi(mu2p4)),1e-6))
                 branches["cosphi"][0] = cosphi
                 # definition on s2 of https://indico.cern.ch/event/846681/contributions/3557724/attachments/1907377/3150380/Displaced_Scouting_Status_Update.pdf
-                branches["lxy"][0] = vecdv2d_pvm.Mod() * cosphi_pvm
+                # branches["Lxy"][0] = vecdv2d_pvm.Mod() * cosphi_pvm
+                # rutgers lxy is lowercase lxy from that set of slides, which does not have the cosine term
+                # branches["lxy"][0] = vecdv2d_pvm.Mod()
+                branches["lxy"][0] = vecdv2d.Mod()
 
                 # both muons need to have no excess hits if the displacement is >3.5cm (otherwise we're within the 1st bpix layer and extra hits don't make sense to calculate)
                 branches["pass_excesshits"][0] = (
@@ -780,8 +797,8 @@ class Looper(object):
                         and (branches["pass_l1"][0])
                         and (branches["pass_json"][0])
                         and (branches["DV_rhoCorr"][0] < 11.)
-                        and (branches["pass_fiducialgen"][0])
-                        and (branches["pass_excesshits"][0])
+                        # and (branches["pass_fiducialgen"][0])
+                        # and (branches["pass_excesshits"][0])
                         )
                 pass_baseline_iso = (nmuon_passiso == 2) and pass_baseline
                 branches["pass_baseline"][0] = pass_baseline
