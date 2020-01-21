@@ -34,6 +34,8 @@ ssh -N -f -L localhost:1234:localhost:1234 uaf-10.t2.ucsd.edu
 
 ### Ntuple catalog
 
+#### Outdated
+
 | Type          | Era           | >=2Mu,>=1DV skim? | >1cm DV skim? | Unblinded 1fb? | Path                                                                                                        | Notes         |
 | ------------- | ------------- | -------------     | ------------- | -------------  | -------------                                                                                               | ------------- |
 | Data          | 2018A         | x                 | x             |                | /hadoop/cms/store/user/namin/ProjectMetis/ScoutingCaloMuon_Run2018A-v1_RAW_v4skim1cm/                       |               |

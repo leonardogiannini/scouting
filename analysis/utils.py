@@ -168,7 +168,13 @@ def get_chunking_dask(filelist, chunksize, client=None, treename="Events",skip_b
         client = get_client()
 
     if xrootd:
-        filelist = [fname.replace("/hadoop/cms","root://redirector.t2.ucsd.edu/") for fname in filelist]
+        temp = []
+        for fname in filelist:
+            if fname.startswith("/hadoop/cms"):
+                temp.append(fname.replace("/hadoop/cms","root://redirector.t2.ucsd.edu/"))
+            else:
+                temp.append(fname.replace("/store/","root://cmsxrootd.fnal.gov//store/"))
+        filelist = temp
     chunks, chunksize, nevents = [], int(chunksize), 0
     def numentries(fname):
         import uproot
@@ -188,18 +194,19 @@ def get_chunking_dask(filelist, chunksize, client=None, treename="Events",skip_b
             chunks.append((fn, chunksize*index, min(chunksize*(index+1), nentries)))
     return chunks, nevents
 
-def dask_hist2d(df, x, y, bins):
+def hist2d_dask(df, x, y, bins):
     """
     np.histogram2d from dask dataframe
 
     Examples
     --------
     >>> bins = [np.linspace(-15,15,200),np.linspace(-15,15,200)]
-    >>> dask_hist2d(df, x="DV_x", y="DV_y", bins=bins).compute()
+    >>> hist2d_dask(df, x="DV_x", y="DV_y", bins=bins).compute()
     """
+    from dask import delayed
     @delayed
     def f(df, bins):
-        return np.histogram2d(df[kx],df[ky], bins=bins)[0]
+        return np.histogram2d(df[x],df[y], bins=bins)[0]
     # do we want delayed(sum) or just sum?
     bins = delayed(bins)
     return sum(f(obj, bins) for obj in df.to_delayed())
@@ -386,3 +393,81 @@ smaller_dtypes = [
     ["nPVM","int8"],
     ["run","int32"],
 ]
+
+def make_df_dask(
+    path,
+    branches = ["dimuon_mass", "pass_*"],
+    cut = "pass_baseline_iso",
+    chunksize = 500e3,
+    xrootd = False,
+    persist = True,
+    client = None,
+    func = None,
+):
+    """
+    Returns dask dataframe from input ROOT files containing given branches
+    for events passing a given cut.
+
+    path: file path(s) or glob string(s)
+    branches: list of branches/glob strings/regex for branches to read
+    cut: selection string input to `df.query()`
+    chunksize: events per task
+    xrootd: use xrootd for input files
+    persist: whether to return persisted dask dataframe or not
+    func: override reading function (must read a chunk and return a DataFrame)
+    """
+    import dask.dataframe as dd
+    from dask import delayed
+    import uproot
+    import pandas as pd
+    if isinstance(path, (str, bytes)):
+        paths = uproot.tree._filename_explode(path)
+    else:
+        paths = [y for x in path for y in uproot.tree._filename_explode(x)]
+
+    if not func:
+        def func(fname, entrystart = None, entrystop = None):
+            t = uproot.open(fname)["Events"]
+            arrs = t.arrays(
+                branches,
+                outputtype = dict,
+                namedecode = "ascii",
+                entrystart = entrystart,
+                entrystop = entrystop,
+            )
+            sel = slice(None,None)
+            df = pd.DataFrame()
+            for k in arrs.keys():
+                if any(k.startswith(y) for y in ["n", "pass_", "BS_", "MET_","run", "lumi", "event", "L1_","dimuon", "cosphi", "absdphi","minabs", "logabs", "lxy"]):
+                    df[k] = arrs[k][sel]
+                if k.startswith("DV_"):
+                    df[k] = arrs[k][sel][:,0]
+                if k.startswith("Muon_"):
+                    df[k.replace("Muon_","Muon1_")] = arrs[k][sel][:,0]
+                    df[k.replace("Muon_","Muon2_")] = arrs[k][sel][:,1]
+            for name,dtype in smaller_dtypes:
+                if name not in df.columns: continue
+                df[name] = df[name].astype(dtype, copy=False)
+            df = df.query(cut)
+            return df
+
+    chunks, total_events = get_chunking_dask(tuple(paths), chunksize, client=client, xrootd=xrootd)
+
+    smallchunk = (chunks[0][0], chunks[0][1], int(chunks[0][1] + (chunks[0][2]-chunks[0][1])//10))
+    meta = func(*smallchunk)
+
+    delayed_func = delayed(func)
+    ddf = dd.from_delayed((delayed_func(*chunk) for chunk in chunks), meta=meta)
+    if persist:
+        ddf = ddf.persist()
+    return ddf
+
+def query_dis(query, typ="basic", return_raw=False):
+    import requests
+    endpoint_url = "http://uaf-7.t2.ucsd.edu:50010/dis/serve"
+    short = "true" if typ in ["basic", "sites"] else "false"
+    url = f"{endpoint_url}?type={typ}&query={query}&short={short}"
+    js = requests.get(url).json()
+    if not return_raw:
+        js = js["payload"]
+    return js
