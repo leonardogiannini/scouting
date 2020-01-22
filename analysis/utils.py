@@ -121,7 +121,7 @@ def make_profile(tobin,toreduce,edges=None,errors=True):
 
 
 @functools.lru_cache(maxsize=256)
-def get_chunking(filelist, chunksize, treename="Events", workers=12, skip_bad_files=False):
+def get_chunking(filelist, chunksize, treename="Events", workers=12, skip_bad_files=False, xrootd=False):
     """
     Return 2-tuple of
     - chunks: triplets of (filename,entrystart,entrystop) calculated with input `chunksize` and `filelist`
@@ -134,6 +134,14 @@ def get_chunking(filelist, chunksize, treename="Events", workers=12, skip_bad_fi
     chunksize = int(chunksize)
     chunks = []
     nevents = 0
+    if xrootd:
+        temp = []
+        for fname in filelist:
+            if fname.startswith("/hadoop/cms"):
+                temp.append(fname.replace("/hadoop/cms","root://redirector.t2.ucsd.edu/"))
+            else:
+                temp.append(fname.replace("/store/","root://cmsxrootd.fnal.gov//store/"))
+        filelist = temp
     if skip_bad_files:
         # slightly slower (serial loop), but can skip bad files
         for fname in tqdm(filelist):
@@ -196,7 +204,7 @@ def get_chunking_dask(filelist, chunksize, client=None, treename="Events",skip_b
 
 def hist2d_dask(df, x, y, bins):
     """
-    np.histogram2d from dask dataframe
+    np.histogram2d from dask dataframe.
 
     Examples
     --------
@@ -206,7 +214,7 @@ def hist2d_dask(df, x, y, bins):
     from dask import delayed
     @delayed
     def f(df, bins):
-        return np.histogram2d(df[x],df[y], bins=bins)[0]
+        return np.histogram2d(df.eval(x),df.eval(y), bins=bins)[0]
     # do we want delayed(sum) or just sum?
     bins = delayed(bins)
     return sum(f(obj, bins) for obj in df.to_delayed())
@@ -394,7 +402,7 @@ smaller_dtypes = [
     ["run","int32"],
 ]
 
-def make_df_dask(
+def make_df(
     path,
     branches = ["dimuon_mass", "pass_*"],
     cut = "pass_baseline_iso",
@@ -403,19 +411,9 @@ def make_df_dask(
     persist = True,
     client = None,
     func = None,
+    partition_size = None,
+    npartitions = None,
 ):
-    """
-    Returns dask dataframe from input ROOT files containing given branches
-    for events passing a given cut.
-
-    path: file path(s) or glob string(s)
-    branches: list of branches/glob strings/regex for branches to read
-    cut: selection string input to `df.query()`
-    chunksize: events per task
-    xrootd: use xrootd for input files
-    persist: whether to return persisted dask dataframe or not
-    func: override reading function (must read a chunk and return a DataFrame)
-    """
     import dask.dataframe as dd
     from dask import delayed
     import uproot
@@ -442,6 +440,8 @@ def make_df_dask(
                     df[k] = arrs[k][sel]
                 if k.startswith("DV_"):
                     df[k] = arrs[k][sel][:,0]
+                if k.startswith("PVM_"):
+                    df[k] = arrs[k][sel][:,0]
                 if k.startswith("Muon_"):
                     df[k.replace("Muon_","Muon1_")] = arrs[k][sel][:,0]
                     df[k.replace("Muon_","Muon2_")] = arrs[k][sel][:,1]
@@ -451,22 +451,113 @@ def make_df_dask(
             df = df.query(cut)
             return df
 
-    chunks, total_events = get_chunking_dask(tuple(paths), chunksize, client=client, xrootd=xrootd)
 
-    smallchunk = (chunks[0][0], chunks[0][1], int(chunks[0][1] + (chunks[0][2]-chunks[0][1])//10))
+
+    return ddf
+
+
+def make_df(
+    path,
+    branches = ["dimuon_mass", "pass_*"],
+    cut = "pass_baseline_iso",
+    chunksize = 500e3,
+    xrootd = False,
+    persist = True,
+    client = None,
+    func = None,
+    partition_size = None,
+    npartitions = None,
+    use_dask = False,
+):
+    """
+    Returns dataframe from input ROOT files containing given branches
+    for events passing a given cut. If `use_dask=True`, returns dask dataframe.
+
+    path: file path(s) or glob string(s)
+    branches: list of branches/glob strings/regex for branches to read
+    cut: selection string input to `df.query()`
+    chunksize: events per task
+    xrootd: use xrootd for input files
+    persist: whether to return persisted dask dataframe or not
+    func: override reading function (must read a chunk and return a DataFrame)
+    partition_size: if not None, passed into df.repartition() before persisting - NOTE might be duplicating the reading. use `npartitions`.
+    npartitions: if not None, passed into df.repartition() before persisting
+    """
+    import dask.dataframe as dd
+    from dask import delayed
+    import uproot
+    import pandas as pd
+    from tqdm.auto import tqdm
+    import concurrent.futures
+    if isinstance(path, (str, bytes)):
+        paths = uproot.tree._filename_explode(path)
+    else:
+        paths = [y for x in path for y in uproot.tree._filename_explode(x)]
+
+    if not func:
+        def func(fname, entrystart = None, entrystop = None):
+            t = uproot.open(fname)["Events"]
+            arrs = t.arrays(
+                branches,
+                outputtype = dict,
+                namedecode = "ascii",
+                entrystart = entrystart,
+                entrystop = entrystop,
+            )
+            sel = slice(None,None)
+            df = pd.DataFrame()
+            for k in arrs.keys():
+                if any(k.startswith(y) for y in ["n", "pass_", "BS_", "MET_","run", "lumi", "event", "L1_","dimuon", "cosphi", "absdphi","minabs", "logabs", "lxy"]):
+                    df[k] = arrs[k][sel]
+                if k.startswith("DV_"):
+                    df[k] = arrs[k][sel][:,0]
+                if k.startswith("PVM_"):
+                    df[k] = arrs[k][sel][:,0]
+                if k.startswith("Muon_"):
+                    df[k.replace("Muon_","Muon1_")] = arrs[k][sel][:,0]
+                    df[k.replace("Muon_","Muon2_")] = arrs[k][sel][:,1]
+            for name,dtype in smaller_dtypes:
+                if name not in df.columns: continue
+                df[name] = df[name].astype(dtype, copy=False)
+            df = df.query(cut)
+            return df
+
+    if use_dask:
+        chunks, total_events = get_chunking_dask(tuple(paths), chunksize, client=client, xrootd=xrootd)
+    else:
+        chunks, total_events = get_chunking(tuple(paths), chunksize, xrootd=xrootd)
+
+    smallchunk_nevents = int(chunks[0][1] + (chunks[0][2]-chunks[0][1])//10)
+    smallchunk = (chunks[0][0], chunks[0][1], smallchunk_nevents)
     meta = func(*smallchunk)
 
-    delayed_func = delayed(func)
-    ddf = dd.from_delayed((delayed_func(*chunk) for chunk in chunks), meta=meta)
-    if persist:
-        ddf = ddf.persist()
+    if not use_dask:
+        smallchunk_mb = meta.memory_usage().sum()/1e6
+        estimated_mb = smallchunk_mb * total_events / smallchunk_nevents
+        if estimated_mb > 15e3:
+            raise RuntimeError("This dataframe would take approx. {:.1f}GB of RAM. Reduce the input size.".format(estimated_mb*1e-3))
+
+        executor = concurrent.futures.ThreadPoolExecutor(6)
+        futures = [executor.submit(func, *chunk) for chunk in chunks]
+        ddf = pd.concat((future.result() for future in tqdm(futures)), sort=True, ignore_index=True, copy=False)
+        del executor
+    else:
+        delayed_func = delayed(func)
+        ddf = dd.from_delayed((delayed_func(*chunk) for chunk in chunks), meta=meta)
+        if partition_size:
+            ddf = ddf.repartition(partition_size=partition_size)
+        if npartitions:
+            ddf = ddf.repartition(npartitions=npartitions)
+        if persist:
+            ddf = ddf.persist()
+
     return ddf
 
 def query_dis(query, typ="basic", return_raw=False):
     import requests
     endpoint_url = "http://uaf-7.t2.ucsd.edu:50010/dis/serve"
-    short = "true" if typ in ["basic", "sites"] else "false"
-    url = f"{endpoint_url}?type={typ}&query={query}&short={short}"
+    short = "short=true" if typ in ["basic", "sites"] else ""
+    url = f"{endpoint_url}?type={typ}&query={query}&{short}"
     js = requests.get(url).json()
     if not return_raw:
         js = js["payload"]

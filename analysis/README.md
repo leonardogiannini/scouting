@@ -14,12 +14,12 @@ bash Miniconda3-latest-Linux-x86_64.sh -b
 conda config --set auto_activate_base false
 conda config --add channels conda-forge
 
-conda create --name analysisenv uproot matplotlib pandas jupyter numba -y
+conda create --name analysisenv uproot matplotlib pandas jupyter numba dask dask-jobqueue -y
 
 # activate environment and install some packages once
 conda activate analysisenv
 pip install git+git://github.com/aminnj/yahist.git#egg=yahist -U
-pip install tqdm coffea
+pip install tqdm coffea jupyter-server-proxy autopep8 jupyter_nbextensions_configurator
 ```
 
 Start analysis jupyter notebook:
