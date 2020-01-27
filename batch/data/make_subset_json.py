@@ -2,6 +2,19 @@
 import json
 from collections import defaultdict
 import random
+import sys
+
+
+# intlumis = {}
+# with open("tot_lumi_summary.txt", "r") as fh:
+#     for line in fh:
+#         try:
+#             parts = line.split("|")
+#             run = int(parts[1].split(":")[0])
+#             intlumi = float(parts[-2])
+#             intlumis[run] = intlumi
+#         except:
+#             pass
 
 # tables and jsons from
 # https://twiki.cern.ch/twiki/bin/view/CMS/PdmV2017Analysis
@@ -42,13 +55,14 @@ for k,v in lumis.items():
 
 # for each era, get ~10% of randomly chosen runs from
 # the old golden json and stick it into the new one
-random.seed(44)
+random.seed(130)
 newlumis = dict()
 for era,runs in sorted(eras_to_runs.items()):
     newruns = random.sample(runs, int(round(len(runs)/10)))
     print("{}: {} -> {} runs".format(era, len(runs), len(newruns)))
     for run in newruns:
         newlumis[run] = lumis[run]
+# print(i,sum([intlumis[int(k)] for k in newlumis.keys()]))
 outname = "Cert_2017-2018_10percentbyrun_JSON.txt"
 with open(outname, "w") as fh:
     json.dump(newlumis, fh)
