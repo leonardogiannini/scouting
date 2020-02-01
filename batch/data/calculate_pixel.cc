@@ -17,11 +17,33 @@ bool is_point_in_one_module(float px, float py, float pz, float arr[]) {
     return true;
 }
 
-bool is_point_in_any_module(float px, float py, float pz) {
+// bool is_point_in_any_module(float px, float py, float pz) {
+//     for (unsigned int imodule = 0; imodule < NMODULES; imodule++) {
+//         if (is_point_in_one_module(px, py, pz, module_volumes[imodule])) return true;
+//     }
+//     return false;
+// }
+
+// Return module number if point is contained in one, otherwise -1
+int point_in_which_module(float px, float py, float pz) {
     for (unsigned int imodule = 0; imodule < NMODULES; imodule++) {
-        if (is_point_in_one_module(px, py, pz, module_volumes[imodule])) return true;
+        if (is_point_in_one_module(px, py, pz, module_volumes[imodule])) return imodule;
     }
-    return false;
+    return -1;
+}
+
+int imodule_to_layernum(int imodule) {
+    if (imodule < 0 or imodule >= NMODULES) return -1;
+    return module_layernums[imodule];
+}
+
+float dist_to_imodule_plane(float px, float py, float pz, int imodule) {
+    if (imodule < 0 or imodule >= NMODULES) return 999.;
+    float* arr = module_volumes[imodule];
+    float sx = px - arr[9];
+    float sy = py - arr[10];
+    float sz = pz - arr[11];
+    return fabs(fabs(arr[3*2]*sx + arr[3*2+1]*sy + arr[3*2+2]*sz) - arr[2+12]);
 }
 
 // float distance_point_one_module(float px, float py, float pz, float arr[]) {
