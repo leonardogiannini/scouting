@@ -40,6 +40,9 @@ def sortwitharg(seq, arg):
     # reorder `seq` according to t
     return [seq[i] for i in arg]
 
+def delta_phi(phi1,phi2):
+    return (phi1 - phi2 + math.pi) % (2*math.pi) - math.pi
+
 def get_track_reference_point(muon, dvx,dvy,dvz):
     pt = muon.pt()
     eta = muon.eta()
@@ -236,13 +239,18 @@ class Looper(object):
             t1 = time.time()
             print(">>> Finished loading in {:.1f} seconds".format(t1-t0))
 
-    def in_pixel_rectangles(self,px,py,pz):
-        if fast: return False
+    def get_pixel_rectangle_info(self,px,py,pz):
+        if fast: return dict()
         self.load_pixel_code()
         rho = math.hypot(px,py)
-        if (0.0 < rho < 2.4): return False
-        if (3.7 < rho < 5.7): return False
-        return r.is_point_in_any_module(px, py, pz)
+        if (0.0 < rho < 2.4): return dict()
+        if (3.7 < rho < 5.7): return dict()
+        imodule = r.point_in_which_module(px, py, pz)
+        return dict(
+                imodule = imodule,
+                planedist = r.dist_to_imodule_plane(px, py, pz, imodule),
+                layernum = r.imodule_to_layernum(imodule),
+                )
 
     def init_branches(self):
 
@@ -251,6 +259,8 @@ class Looper(object):
         make_branch("run", "l")
         make_branch("luminosityBlock", "l")
         make_branch("event", "l")
+
+        make_branch("year", "i")
 
         make_branch("pass_skim", "b")
         make_branch("pass_l1", "b")
@@ -293,7 +303,9 @@ class Looper(object):
         make_branch("DV_passid","vb")
         make_branch("DV_rho", "vf")
         make_branch("DV_rhoCorr", "vf")
-        make_branch("DV_inPixelRectangles", "vb")
+        make_branch("DV_inPixel", "vb")
+        make_branch("DV_distPixel", "vf")
+        make_branch("DV_layerPixel", "vi")
 
 
         if self.do_jets:
@@ -487,6 +499,8 @@ class Looper(object):
             branches["luminosityBlock"][0] = lumi
             branches["event"][0] = eventnum
 
+            branches["year"][0] = self.year
+
             # branches["pass_json"][0] = self.is_in_goldenjson(run, lumi)
             branches["pass_json"][0] = True # started requiring golden upstream
 
@@ -544,7 +558,11 @@ class Looper(object):
                 branches["DV_isValidVtx"].push_back(dv.isValidVtx())
                 branches["DV_rho"].push_back(rho)
                 branches["DV_rhoCorr"].push_back(rhoCorr)
-                branches["DV_inPixelRectangles"].push_back(self.in_pixel_rectangles(vx,vy,vz))
+                pixinfo = self.get_pixel_rectangle_info(vx,vy,vz)
+                branches["DV_inPixel"].push_back(pixinfo.get("imodule",-1)>=0)
+                branches["DV_distPixel"].push_back(pixinfo.get("planedist",999.))
+                branches["DV_layerPixel"].push_back(pixinfo.get("layernum",-1))
+
                 gooddv = (
                         (dv.xError() < 0.05) 
                         and (dv.yError() < 0.05) 
@@ -681,11 +699,11 @@ class Looper(object):
                 drjet = -1
                 if self.do_jets:
                     # find index of jet that is closest to this muon. `sorted_etaphis`: [(index, (eta,phi)), ...]
-                    sorted_etaphis = sorted(enumerate(jet_etaphis), key=lambda x: math.hypot(eta-x[1][0], phi-x[1][1]))
+                    sorted_etaphis = sorted(enumerate(jet_etaphis), key=lambda x: math.hypot(eta-x[1][0], delta_phi(phi,x[1][1])))
                     if len(sorted_etaphis) > 0: jetIdx1 = sorted_etaphis[0][0]
                     if jetIdx1 >= 0:
                         jeteta, jetphi = sorted_etaphis[0][1]
-                        drjet = math.hypot(eta-jeteta,phi-jetphi)
+                        drjet = math.hypot(eta-jeteta,delta_phi(phi,jetphi))
                 branches["Muon_drjet"].push_back(drjet)
                 branches["Muon_jetIdx1"].push_back(jetIdx1)
 
