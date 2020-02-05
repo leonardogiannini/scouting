@@ -3,6 +3,7 @@ import numpy as np
 import functools
 import pandas as pd
 import uproot_methods
+import uproot
 
 def set_plotting_style():
     from matplotlib import rcParams
@@ -121,103 +122,118 @@ def make_profile(tobin,toreduce,edges=None,errors=True):
 
 
 @functools.lru_cache(maxsize=256)
-def get_chunking(filelist, chunksize, treename="Events", workers=12, skip_bad_files=False, xrootd=False):
+def get_chunking(filelist, chunksize, treename="Events", workers=12, skip_bad_files=False, xrootd=False, client=None, use_dask=False):
     """
     Return 2-tuple of
     - chunks: triplets of (filename,entrystart,entrystop) calculated with input `chunksize` and `filelist`
     - total_nevents: total event count over `filelist`
     """
     import uproot
-    import awkward
     from tqdm.auto import tqdm
     import concurrent.futures
+
+    if xrootd:
+        temp = []
+        for fname in filelist:
+            if fname.startswith("/hadoop/cms"):
+                temp.append(fname.replace("/hadoop/cms","root://redirector.t2.ucsd.edu/"))
+            else:
+                temp.append(fname.replace("/store/","root://cmsxrootd.fnal.gov//store/"))
+        filelist = temp
+
     chunksize = int(chunksize)
     chunks = []
     nevents = 0
-    if xrootd:
-        temp = []
-        for fname in filelist:
-            if fname.startswith("/hadoop/cms"):
-                temp.append(fname.replace("/hadoop/cms","root://redirector.t2.ucsd.edu/"))
-            else:
-                temp.append(fname.replace("/store/","root://cmsxrootd.fnal.gov//store/"))
-        filelist = temp
-    if skip_bad_files:
-        # slightly slower (serial loop), but can skip bad files
-        for fname in tqdm(filelist):
+
+    if use_dask:
+        if not client:
+            from dask.distributed import get_client
+            client = get_client()
+        def numentries(fname):
+            import uproot
             try:
-                items = uproot.numentries(fname, treename, total=False).items()
-            except (IndexError, ValueError) as e:
-                print("Skipping bad file", fname)
-                continue
-            for fn, nentries in items:
-                nevents += nentries
-                for index in range(nentries // chunksize + 1):
-                    chunks.append((fn, chunksize*index, min(chunksize*(index+1), nentries)))
-    elif filelist[0].endswith(".awkd"):
-        for fname in tqdm(filelist):
-            f = awkward.load(fname,whitelist=awkward.persist.whitelist + [['blosc', 'decompress']])
-            nentries = len(f["run"])
-            nevents += nentries
-            for index in range(nentries // chunksize + 1):
-                chunks.append((fname, chunksize*index, min(chunksize*(index+1), nentries)))
-    else:
-        executor = None if len(filelist) < 5 else concurrent.futures.ThreadPoolExecutor(min(workers, len(filelist)))
-        for fn, nentries in uproot.numentries(filelist, treename, total=False, executor=executor).items():
+                return (fname,uproot.numentries(fname,treename))
+            except:
+                return (fname,-1)
+        info = client.gather(client.map(numentries, filelist))
+        for fn, nentries in info:
+            if nentries < 0:
+                if skip_bad_files:
+                    print("Skipping bad file: {}".format(fn))
+                    continue
+                else: raise RuntimeError("Bad file: {}".format(fn))
             nevents += nentries
             for index in range(nentries // chunksize + 1):
                 chunks.append((fn, chunksize*index, min(chunksize*(index+1), nentries)))
+    else:
+        if skip_bad_files:
+            # slightly slower (serial loop), but can skip bad files
+            for fname in tqdm(filelist):
+                try:
+                    items = uproot.numentries(fname, treename, total=False).items()
+                except (IndexError, ValueError) as e:
+                    print("Skipping bad file", fname)
+                    continue
+                for fn, nentries in items:
+                    nevents += nentries
+                    for index in range(nentries // chunksize + 1):
+                        chunks.append((fn, chunksize*index, min(chunksize*(index+1), nentries)))
+        else:
+            executor = None if len(filelist) < 5 else concurrent.futures.ThreadPoolExecutor(min(workers, len(filelist)))
+            for fn, nentries in uproot.numentries(filelist, treename, total=False, executor=executor).items():
+                nevents += nentries
+                for index in range(nentries // chunksize + 1):
+                    chunks.append((fn, chunksize*index, min(chunksize*(index+1), nentries)))
+
     return chunks, nevents
 
-@functools.lru_cache(maxsize=256)
-def get_chunking_dask(filelist, chunksize, client=None, treename="Events",skip_bad_files=False, xrootd=False):
-    if not client:
-        from dask.distributed import get_client
-        client = get_client()
-
-    if xrootd:
-        temp = []
-        for fname in filelist:
-            if fname.startswith("/hadoop/cms"):
-                temp.append(fname.replace("/hadoop/cms","root://redirector.t2.ucsd.edu/"))
-            else:
-                temp.append(fname.replace("/store/","root://cmsxrootd.fnal.gov//store/"))
-        filelist = temp
-    chunks, chunksize, nevents = [], int(chunksize), 0
-    def numentries(fname):
-        import uproot
-        try:
-            return (fname,uproot.numentries(fname,treename))
-        except:
-            return (fname,-1)
-    info = client.gather(client.map(numentries, filelist))
-    for fn, nentries in info:
-        if nentries < 0:
-            if skip_bad_files:
-                print("Skipping bad file: {}".format(fn))
-                continue
-            else: raise RuntimeError("Bad file: {}".format(fn))
-        nevents += nentries
-        for index in range(nentries // chunksize + 1):
-            chunks.append((fn, chunksize*index, min(chunksize*(index+1), nentries)))
-    return chunks, nevents
-
-def hist2d_dask(df, x, y, bins):
+def hist2d_dask(df, x, y, bins, method=1):
     """
     np.histogram2d from dask dataframe.
+    3 methods to test:
+        1 - map over delayed objects from dataframe
+        2 - map over partitions from dataframe
+        3 - map over partitions from dataframe using numba
 
     Examples
     --------
     >>> bins = [np.linspace(-15,15,200),np.linspace(-15,15,200)]
     >>> hist2d_dask(df, x="DV_x", y="DV_y", bins=bins).compute()
     """
-    from dask import delayed
-    @delayed
-    def f(df, bins):
-        return np.histogram2d(df.eval(x),df.eval(y), bins=bins)[0]
-    # do we want delayed(sum) or just sum?
-    bins = delayed(bins)
-    return sum(f(obj, bins) for obj in df.to_delayed())
+    if method == 1:
+        from dask import delayed
+        @delayed
+        def f(df, bins):
+            return np.histogram2d(df.eval(x),df.eval(y), bins=bins)[0]
+        bins = delayed(bins)
+        agg = delayed(sum)
+        return agg(f(obj, bins) for obj in df.to_delayed())
+    if method == 2:
+        def f(df, bins):
+            return np.histogram2d(df.eval(x), df.eval(y), bins=bins)[0].flatten()[np.newaxis]
+        # FIXME, probably better way to do this
+        # can specify a (x, y bins) or just 1d bins to be used for x and y
+        # need to reshape differently depending on case
+        if len(bins) == 2: 
+            shape = [bins[0].shape[0]-1, bins[1].shape[0]-1]
+        else:
+            shape = [bins.shape[0]-1, bins.shape[0]-1]
+        return df.map_partitions(f, bins).sum(axis=0).reshape(shape)
+    if method == 3:
+        def f(df, bins):
+            if len(bins) == 2:
+                binsx, binsy = bins
+            else:
+                binsx, binsy = bins, bins
+            return numba_histogram2d(df.eval(x).values, df.eval(y).values, binsx, binsy, None, False)[0].flatten()[np.newaxis]
+        # FIXME, probably better way to do this
+        # can specify a (x, y bins) or just 1d bins to be used for x and y
+        # need to reshape differently depending on case
+        if len(bins) == 2: 
+            shape = [bins[0].shape[0]-1, bins[1].shape[0]-1]
+        else:
+            shape = [bins.shape[0]-1, bins.shape[0]-1]
+        return df.map_partitions(f, bins).sum(axis=0).reshape(shape)
 
 def get_geometry_df(fname):
     """
@@ -235,8 +251,20 @@ def get_geometry_df(fname):
     df = df[df["shape"].apply(lambda x:x[0])==2.]
     df["endcap"] = df.eval("abs(translation_z)>25")
     # layer 1-4 for barrel, 5,7,8 for z disks
-    df["layer"] = df.eval("0+(translation_rho>0)+(translation_rho>9)+(translation_rho>14)"
-                            "+3*(abs(translation_z)>25)+(abs(translation_z)>35)+(abs(translation_z)>45)").astype(int)
+    layers = []
+    for rho, z in df[["translation_rho","translation_z"]].values:
+        ilayer = -1
+        if abs(z)<25:
+            if 0 < rho < 5: ilayer = 1
+            if 5 < rho < 9: ilayer = 2
+            if 9 < rho < 14: ilayer = 3
+            if 14 < rho < 25: ilayer = 4
+        else:
+            if 25 < abs(z) < 35: ilayer = 5
+            if 35 < abs(z) < 45: ilayer = 6
+            if 45 < abs(z) < 70: ilayer = 7
+        layers.append(ilayer)
+    df["layer"] = np.array(layers)
     df = df.query("translation_rho<18") # 4 pixel layers
     return df
 
@@ -305,13 +333,16 @@ class TreeLikeAccessor:
     def __init__(self, pandas_obj):
         self._obj = pandas_obj
 
-    def draw(self, varexp, sel, bins=None, overflow=True):
+    def draw(self, varexp, sel, bins=None, overflow=True, fast=False):
         try:
             from yahist import Hist1D
         except:
             raise Exception("Need Hist1D object from the yahist package")
 
         df = self._obj
+
+        if fast:
+            return Hist1D(hacky_query_eval(df, varexp, sel), bins=bins)
 
         weights = df.eval(sel)
         mask = np.zeros(len(df), dtype=bool)
@@ -328,10 +359,9 @@ class TreeLikeAccessor:
             extra["weights"] = weights[mask]
         vals = df[mask].eval(varexp)
         if bins is not None:
-            if type(bins) in [str]:
-                raise NotImplementedError()
-            else:
-                extra["bins"] = bins
+            # if type(bins) in [str]:
+            #     raise NotImplementedError()
+            extra["bins"] = bins
         return Hist1D(vals, **extra)
 
 @pd.api.extensions.register_dataframe_accessor("vec")
@@ -368,6 +398,7 @@ smaller_dtypes = [
     ["DV_chi2prob","float32"],
     ["DV_ndof","int8"],
     ["DV_redchi2","float32"],
+    ["DV_layerPixel","int8"],
     ["Muon1_charge","int8"],
     ["Muon1_excesshits","int8"],
     ["Muon1_m","float32"],
@@ -402,59 +433,6 @@ smaller_dtypes = [
     ["run","int32"],
 ]
 
-def make_df(
-    path,
-    branches = ["dimuon_mass", "pass_*"],
-    cut = "pass_baseline_iso",
-    chunksize = 500e3,
-    xrootd = False,
-    persist = True,
-    client = None,
-    func = None,
-    partition_size = None,
-    npartitions = None,
-):
-    import dask.dataframe as dd
-    from dask import delayed
-    import uproot
-    import pandas as pd
-    if isinstance(path, (str, bytes)):
-        paths = uproot.tree._filename_explode(path)
-    else:
-        paths = [y for x in path for y in uproot.tree._filename_explode(x)]
-
-    if not func:
-        def func(fname, entrystart = None, entrystop = None):
-            t = uproot.open(fname)["Events"]
-            arrs = t.arrays(
-                branches,
-                outputtype = dict,
-                namedecode = "ascii",
-                entrystart = entrystart,
-                entrystop = entrystop,
-            )
-            sel = slice(None,None)
-            df = pd.DataFrame()
-            for k in arrs.keys():
-                if any(k.startswith(y) for y in ["n", "pass_", "BS_", "MET_","run", "lumi", "event", "L1_","dimuon", "cosphi", "absdphi","minabs", "logabs", "lxy"]):
-                    df[k] = arrs[k][sel]
-                if k.startswith("DV_"):
-                    df[k] = arrs[k][sel][:,0]
-                if k.startswith("PVM_"):
-                    df[k] = arrs[k][sel][:,0]
-                if k.startswith("Muon_"):
-                    df[k.replace("Muon_","Muon1_")] = arrs[k][sel][:,0]
-                    df[k.replace("Muon_","Muon2_")] = arrs[k][sel][:,1]
-            for name,dtype in smaller_dtypes:
-                if name not in df.columns: continue
-                df[name] = df[name].astype(dtype, copy=False)
-            df = df.query(cut)
-            return df
-
-
-
-    return ddf
-
 
 def make_df(
     path,
@@ -468,6 +446,8 @@ def make_df(
     partition_size = None,
     npartitions = None,
     use_dask = False,
+    skip_bad_files = False,
+    nthreads = 6,
 ):
     """
     Returns dataframe from input ROOT files containing given branches
@@ -482,6 +462,8 @@ def make_df(
     func: override reading function (must read a chunk and return a DataFrame)
     partition_size: if not None, passed into df.repartition() before persisting - NOTE might be duplicating the reading. use `npartitions`.
     npartitions: if not None, passed into df.repartition() before persisting
+    skip_bad_files: whether to skip bad files according to failure of uproot.numentries
+    nthreads: number of ThreadPoolExecutor threads when not using dask (default 6)
     """
     import dask.dataframe as dd
     from dask import delayed
@@ -522,10 +504,7 @@ def make_df(
             df = df.query(cut)
             return df
 
-    if use_dask:
-        chunks, total_events = get_chunking_dask(tuple(paths), chunksize, client=client, xrootd=xrootd)
-    else:
-        chunks, total_events = get_chunking(tuple(paths), chunksize, xrootd=xrootd)
+    chunks, total_events = get_chunking(tuple(paths), chunksize, client=client, xrootd=xrootd, use_dask=use_dask, skip_bad_files=skip_bad_files)
 
     smallchunk_nevents = int(chunks[0][1] + (chunks[0][2]-chunks[0][1])//10)
     smallchunk = (chunks[0][0], chunks[0][1], smallchunk_nevents)
@@ -537,7 +516,7 @@ def make_df(
         if estimated_mb > 15e3:
             raise RuntimeError("This dataframe would take approx. {:.1f}GB of RAM. Reduce the input size.".format(estimated_mb*1e-3))
 
-        executor = concurrent.futures.ThreadPoolExecutor(6)
+        executor = concurrent.futures.ThreadPoolExecutor(nthreads)
         futures = [executor.submit(func, *chunk) for chunk in chunks]
         ddf = pd.concat((future.result() for future in tqdm(futures)), sort=True, ignore_index=True, copy=False)
         del executor
@@ -552,6 +531,127 @@ def make_df(
             ddf = ddf.persist()
 
     return ddf
+
+def dataframe_to_ttree(df, filename, treename="t", chunksize=1e6, compression=uproot.LZ4(1), progress=True):
+    """
+    Writes ROOT file containing one TTree with the input pandas DataFrame.
+
+    filename: name of output file
+    treename: name of output TTree
+    chunksize: number of rows per basket
+    compression: uproot compression object (LZ4, ZLIB, LZMA, or None)
+    progress: show tqdm progress bar?
+    """
+    t = uproot.newtree(df.dtypes)
+    with uproot.recreate(filename, compression=compression) as f:
+        f[treename] = t
+        chunksize = int(chunksize)
+        iterable = range(0, len(df), chunksize)
+        if progress:
+            from tqdm.auto import tqdm
+            iterable = tqdm(iterable)
+        for i in iterable:
+            chunk = df.iloc[i:i+chunksize]
+            f[treename].extend({ k:chunk[k].values for k in chunk.columns })
+
+def ttree_to_dataframe(filename, treename="t", branches=None, progress=True, **kwargs):
+    """
+    Read ROOT file containing one TTree into pandas DataFrame.
+    Thin wrapper around `uproot.iterate`.
+
+    filename: filename(s)/file pattern(s)
+    treename: name of input TTree
+    progress: show tqdm progress bar?
+    branches: list of branches to read (default of `None` reads all)
+    **kwargs: extra kwargs to pass to `uproot.iterate`
+    """
+    # entrysteps of None iterates by basket to match `dataframe_to_ttree`
+    iterable = uproot.iterate(filename, treename, branches,
+                              entrysteps=kwargs.pop("entrysteps",None), outputtype=pd.DataFrame,
+                              namedecode="ascii", **kwargs
+                             )
+    if progress:
+        from tqdm.auto import tqdm
+        iterable = tqdm(iterable)
+    # df = pd.concat(iterable, ignore_index=True, sort=True, copy=False)
+    df = pd.concat(iterable, ignore_index=True, sort=True)
+    return df
+
+def hacky_query_eval(df, varstr, selstr=""):
+    """
+    Please don't read/use. This is dangerous and stupid, kind of like 
+    integrating a function by printing out a plot, coloring the area under it in red,
+    faxing it to yourself, then counting red pixels to get the area.
+
+    Basically I wanted some way to convert
+
+        df.query("dimuon_mass > 5 and pass_baseline_iso").eval("dimuon_mass").mean()
+
+    into
+
+        df["dimuon_mass"][ (df["dimuon_mass"] > 5) & (df["pass_baseline_iso"]) ].mean()
+
+    because the latter doesn't make an intermediate copy of all the columns with query(),
+    and it also doesn't do jitting with numexpr. In principle, this is much faster to execute.
+
+    Usage:
+
+        arr = hacky_query_eval(
+            df_data,
+            varstr = "dimuon_mass",
+            selstr = "pass_baseline_iso and 0<logabsetaphi<1.25",
+        )
+        print(arr.mean())
+    """
+    import tokenize
+    from io import BytesIO
+
+    columns = df.columns
+    def hack_with_df(s):
+        if not s: return ""
+        pairs = []
+        for num, val, _, _, _ in tokenize.tokenize(BytesIO(s.encode("utf-8")).readline):
+            if num == tokenize.NAME and val == "and":
+                val = "&"
+            if num == tokenize.NAME and val == "or":
+                val = "|"
+            if num == tokenize.NAME and val in columns:
+                val = f' df["{val}"] '
+            pairs.append([num, val])
+                    
+        # find groups of 5 tokens for things like
+        #    1 < x <= 2
+        # and replace with
+        #    ((1<x) & (x<=2))
+        # yes, I only check for at most one.
+        replacements = []
+        if len(pairs) >= 5:
+            for ip in range(len(pairs)-4):
+                nums, vals = zip(*pairs[ip:ip+5])
+                if nums[1] == nums[3] == tokenize.OP:
+                    if all(v in ["<","<=",">",">="] for v in [vals[1], vals[3]]):
+                        separated_tokens = [
+                            [tokenize.OP, "("], [tokenize.OP, "("],
+                            [nums[0], vals[0]], [nums[1], vals[1]], [nums[2], vals[2]],
+                            [tokenize.OP, ")"], [tokenize.NAME, "&"], [tokenize.OP, "("],
+                            [nums[2], vals[2]], [nums[3], vals[3]], [nums[4], vals[4]],
+                            [tokenize.OP, ")"], [tokenize.OP, ")"],
+                        ]
+                        replacements.append([ip, ip+5, separated_tokens])
+
+        for idx1, idx2, replacement in replacements:
+            # replace the 5 tokens with the new tokens, and overwrite the pairs
+            pairs = pairs[:idx1] + replacement + pairs[idx2:]
+
+        return tokenize.untokenize(pairs).decode("utf-8")
+
+    hacky_selstr = hack_with_df(selstr)
+    hacky_varstr = hack_with_df(varstr)
+    if hacky_selstr: hacky_selstr = f"[{hacky_selstr}]"
+    hacky_line = f"({hacky_varstr}){hacky_selstr}"
+    print(f"Executing: f{hacky_line}")
+    return eval(hacky_line)
+
 
 def query_dis(query, typ="basic", return_raw=False):
     import requests
