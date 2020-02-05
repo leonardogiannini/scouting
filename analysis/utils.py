@@ -603,55 +603,37 @@ def hacky_query_eval(df, varstr, selstr=""):
         )
         print(arr.mean())
     """
-    import tokenize
-    from io import BytesIO
-
-    columns = df.columns
-    def hack_with_df(s):
-        if not s: return ""
-        pairs = []
-        for num, val, _, _, _ in tokenize.tokenize(BytesIO(s.encode("utf-8")).readline):
-            if num == tokenize.NAME and val == "and":
-                val = "&"
-            if num == tokenize.NAME and val == "or":
-                val = "|"
-            if num == tokenize.NAME and val in columns:
-                val = f' df["{val}"] '
-            pairs.append([num, val])
-                    
-        # find groups of 5 tokens for things like
-        #    1 < x <= 2
-        # and replace with
-        #    ((1<x) & (x<=2))
-        # yes, I only check for at most one.
-        replacements = []
-        if len(pairs) >= 5:
-            for ip in range(len(pairs)-4):
-                nums, vals = zip(*pairs[ip:ip+5])
-                if nums[1] == nums[3] == tokenize.OP:
-                    if all(v in ["<","<=",">",">="] for v in [vals[1], vals[3]]):
-                        separated_tokens = [
-                            [tokenize.OP, "("], [tokenize.OP, "("],
-                            [nums[0], vals[0]], [nums[1], vals[1]], [nums[2], vals[2]],
-                            [tokenize.OP, ")"], [tokenize.NAME, "&"], [tokenize.OP, "("],
-                            [nums[2], vals[2]], [nums[3], vals[3]], [nums[4], vals[4]],
-                            [tokenize.OP, ")"], [tokenize.OP, ")"],
-                        ]
-                        replacements.append([ip, ip+5, separated_tokens])
-
-        for idx1, idx2, replacement in replacements:
-            # replace the 5 tokens with the new tokens, and overwrite the pairs
-            pairs = pairs[:idx1] + replacement + pairs[idx2:]
-
-        return tokenize.untokenize(pairs).decode("utf-8")
-
-    hacky_selstr = hack_with_df(selstr)
-    hacky_varstr = hack_with_df(varstr)
-    if hacky_selstr: hacky_selstr = f"[{hacky_selstr}]"
-    hacky_line = f"({hacky_varstr}){hacky_selstr}"
-    print(f"Executing: f{hacky_line}")
-    return eval(hacky_line)
-
+    from pandas.core.computation.expr import Expr
+    from pandas.core.computation.scope import Scope
+    env = Scope(
+        1,
+        global_dict=globals(),
+        local_dict=locals(),
+        resolvers=[df],
+        target=None,
+    )
+    def inject_df(s):
+        """
+        convert expression string like (a > 1) to (df["a"] > 1)
+        so that it can be eval'd later
+        """
+        expr = Expr(s, env=env)
+        self = expr._visitor
+        def visit_Name_hack(node, **kwargs):
+            result = self.term_type(node.id, self.env, **kwargs)
+            result._name = f'df["{result._name}"]'
+            return result
+        expr._visitor.visit_Name = visit_Name_hack
+        expr.terms = expr.parse()
+        return str(expr)
+    varexpr = inject_df(varstr)
+    toeval = f"({varexpr})"
+    if selstr:
+        selexpr = str(inject_df(selstr))
+        toeval += f"[{selexpr}]"
+    print(f"Evaluating string: {toeval}")
+    result = eval(toeval)
+    return result
 
 def query_dis(query, typ="basic", return_raw=False):
     import requests
