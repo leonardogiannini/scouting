@@ -43,7 +43,7 @@ float dist_to_imodule_plane(float px, float py, float pz, int imodule) {
     float sx = px - arr[9];
     float sy = py - arr[10];
     float sz = pz - arr[11];
-    return fabs(fabs(arr[3*2]*sx + arr[3*2+1]*sy + arr[3*2+2]*sz) - arr[2+12]);
+    return fabs(arr[3*2]*sx + arr[3*2+1]*sy + arr[3*2+2]*sz);
 }
 
 // float distance_point_one_module(float px, float py, float pz, float arr[]) {
