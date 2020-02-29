@@ -46,7 +46,6 @@ print("Using {}".format(gtags[opts.era]))
 process.GlobalTag.globaltag = gtags[opts.era]
 
 process.maxEvents = cms.untracked.PSet(
-    # input = cms.untracked.int32(-1)
     input = cms.untracked.int32(opts.nevents)
 )
 process.MessageLogger.cerr.FwkReport.reportEvery = 5000
@@ -90,11 +89,6 @@ if len(opts.output):
 
 process.outpath = cms.EndPath(process.out)
 
-# process.options = cms.untracked.PSet(
-#         allowUnscheduled = cms.untracked.bool(True),
-#         wantSummary = cms.untracked.bool(True),
-# )
-
 process.Timing = cms.Service("Timing",
         summaryOnly = cms.untracked.bool(True)
         )
@@ -120,25 +114,9 @@ L1Info = ["L1_DoubleMu0", "L1_DoubleMu0_Mass_Min1", "L1_DoubleMu0_OQ",
  "L1_DoubleMu4p5er2p0_SQ_OS_Mass7to18", "L1_DoubleMu9_SQ", "L1_DoubleMu_12_5",
  "L1_DoubleMu_15_5_SQ", "L1_DoubleMu_15_7", "L1_DoubleMu_15_7_Mass_Min1",
  "L1_DoubleMu_15_7_SQ",
- # "L1_QuadMu0", "L1_QuadMu0_OQ", "L1_QuadMu0_SQ",
- # "L1_TripleMu0", "L1_TripleMu0_OQ", "L1_TripleMu0_SQ", "L1_TripleMu3",
- # "L1_TripleMu3_SQ", "L1_TripleMu_5SQ_3SQ_0OQ",
- # "L1_TripleMu_5SQ_3SQ_0OQ_DoubleMu_5_3_SQ_OS_Mass_Max9",
- # "L1_TripleMu_5SQ_3SQ_0_DoubleMu_5_3_SQ_OS_Mass_Max9", "L1_TripleMu_5_3_3",
- # "L1_TripleMu_5_3_3_SQ", "L1_TripleMu_5_3p5_2p5",
- # "L1_TripleMu_5_3p5_2p5_DoubleMu_5_2p5_OS_Mass_5to17",
- # "L1_TripleMu_5_3p5_2p5_OQ_DoubleMu_5_2p5_OQ_OS_Mass_5to17",
- # "L1_TripleMu_5_4_2p5_DoubleMu_5_2p5_OS_Mass_5to17", "L1_TripleMu_5_5_3",
- # "L1_ZeroBias"
  ]
 
 HLTInfo = [
-           # ['CaloJet40_CaloBTagScouting',        'DST_CaloJet40_CaloBTagScouting_v*'],
-           # ['CaloScoutingHT250',                 'DST_HT250_CaloScouting_v*'],
-           # ['CaloBTagScoutingHT250',             'DST_HT250_CaloBTagScouting_v*'],
-           # ['CaloBTagScoutingL1HTT',             'DST_L1HTT_CaloBTagScouting_v*'],
-           # ['ZeroBias_CaloScouting_PFScouting',  'DST_ZeroBias_CaloScouting_PFScouting_v*'],
-           # ['DoubleMu1_noVtx',                   'DST_DoubleMu1_noVtx_CaloScouting_v*'],
            ['DoubleMu3_noVtx',                   'DST_DoubleMu3_noVtx_CaloScouting_v*'],
            ['DoubleMu3_noVtx_Monitoring',        'DST_DoubleMu3_noVtx_CaloScouting_Monitoring_v*'],
            ]
@@ -155,6 +133,7 @@ process.triggerMaker = cms.EDProducer("TriggerMaker",
             throw                 = cms.bool(True),
             ),
         doL1 = cms.bool(True),
+        doTriggerObjects = cms.bool(True),
         AlgInputTag = cms.InputTag("gtStage2Digis"),
         l1tAlgBlkInputTag = cms.InputTag("gtStage2Digis"),
         l1tExtBlkInputTag = cms.InputTag("gtStage2Digis"),
@@ -178,7 +157,21 @@ process.gtStage2Digis.InputLabel = cms.InputTag( "hltFEDSelectorL1" )
 
 process.offlineBeamSpot = cms.EDProducer("BeamSpotProducer")
 
+parts = []
 if do_skim:
-    process.skimpath = cms.Path(process.countmu * process.countvtx * process.gtStage2Digis * process.offlineBeamSpot * process.beamSpotMaker * process.triggerMaker * process.MeasurementTrackerEvent * process.hitMaker)
-else:
-    process.skimpath = cms.Path(process.gtStage2Digis * process.offlineBeamSpot * process.beamSpotMaker * process.triggerMaker * process.MeasurementTrackerEvent * process.hitMaker)
+    parts.extend([
+        process.countmu,
+        process.countvtx,
+        ])
+parts.extend([
+    process.gtStage2Digis,
+    process.triggerMaker,
+    process.offlineBeamSpot, process.beamSpotMaker,
+    process.MeasurementTrackerEvent, process.hitMaker,
+    ])
+process.skimpath = cms.Path(reduce(lambda x,y: x*y, parts))
+
+# if do_skim:
+#     process.skimpath = cms.Path(process.countmu * process.countvtx * process.gtStage2Digis * process.offlineBeamSpot * process.beamSpotMaker * process.triggerMaker * process.MeasurementTrackerEvent * process.hitMaker)
+# else:
+#     process.skimpath = cms.Path(process.gtStage2Digis * process.offlineBeamSpot * process.beamSpotMaker * process.triggerMaker * process.MeasurementTrackerEvent * process.hitMaker)
