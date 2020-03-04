@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import sys
 
@@ -14,6 +16,7 @@ import pickle
 
 import socket
 import gzip
+
 
 MUON_MASS = 0.10566
 
@@ -40,10 +43,23 @@ def sortwitharg(seq, arg):
     # reorder `seq` according to t
     return [seq[i] for i in arg]
 
+# from https://github.com/root-project/root/blob/7e47c421a88fdd75b7dce058ece9b4f31135b41b/bindings/pyroot/ROOT.py#L230
+def get_iter(ch, entrystart=None, entrystop=None):
+   i = 0
+   if entrystart is not None: i += entrystart
+   bytes_read = ch.GetEntry(i)
+   while (bytes_read > 0) and ((entrystop is None) or (i < entrystop-1)):
+      yield i, ch
+      i += 1
+      bytes_read = ch.GetEntry(i)
+   if bytes_read == -1:
+      raise RuntimeError( "TTree I/O error" )
+
+
 def delta_phi(phi1,phi2):
     return (phi1 - phi2 + math.pi) % (2*math.pi) - math.pi
 
-def get_track_reference_point(muon, dvx,dvy,dvz):
+def get_track_reference_point(muon):
     pt = muon.pt()
     eta = muon.eta()
     phi = muon.phi()
@@ -63,10 +79,10 @@ def get_track_reference_point(muon, dvx,dvy,dvz):
     return refx, refy, refz
 
 def does_dv_pass_id(dv):
-    if dv.obj.xError() > 0.05: return False
-    if dv.obj.yError() > 0.05: return False
-    if dv.obj.zError() > 0.10: return False
-    if dv.obj.chi2()/dv.obj.ndof() > 5: return False
+    if dv.xError() > 0.05: return False
+    if dv.yError() > 0.05: return False
+    if dv.zError() > 0.10: return False
+    if dv.chi2()/dv.ndof() > 5: return False
     if dv.rhoCorr > 11.: return False
     return True
 
@@ -95,7 +111,9 @@ def pick_best_objects(dvs, muons, run, is_mc):
         [0, 1, 0, 2]
         [0, 1, 0, 2, 2]
         [0, 1, 0, 2, 2, 1]
-    Maybe a missing vector clear() statement? Only consider the new elements on the right to get:
+    Due to a missing vector clear() statement:
+    https://github.com/cms-sw/cmssw/commit/6296892159b21e3add611cb43b485560e8b06075 
+    Only consider the new elements on the right to get:
         [0]
         [1]
         [0, 2]
@@ -116,12 +134,12 @@ def pick_best_objects(dvs, muons, run, is_mc):
     d_idv_to_imuon = {}
     curr_length = 0
     for imuon,muon in enumerate(muons):
-        indices = list(muon.obj.vtxIndx())
+        indices = list(muon.vtxIndx())
         if bugged_branches:
             indices = indices[curr_length:]
             curr_length += len(indices)
         d_imuon_to_idv[imuon] = indices
-        d_imuon_to_pt[imuon] = muon.obj.pt()
+        d_imuon_to_pt[imuon] = muon.pt()
         for idx in indices:
             if idx not in d_idv_to_imuon: d_idv_to_imuon[idx] = []
             d_idv_to_imuon[idx].append(imuon)
@@ -129,9 +147,9 @@ def pick_best_objects(dvs, muons, run, is_mc):
     # Make a mapping of *good* dv indices to max(xError, yError)
     d_goodidv_to_xyerrormax = {}
     for idv, dv in enumerate(dvs):
-        xerror = dv.obj.xError()
-        yerror = dv.obj.yError()
-        zerror = dv.obj.zError()
+        xerror = dv.xError()
+        yerror = dv.yError()
+        zerror = dv.zError()
         if not dv.passid: continue
         d_goodidv_to_xyerrormax[idv] = max(xerror, yerror)
     sortedidvs = sorted(d_goodidv_to_xyerrormax.keys(), key=d_goodidv_to_xyerrormax.__getitem__)
@@ -146,13 +164,13 @@ def pick_best_objects(dvs, muons, run, is_mc):
     # It could (rarely) be the case that NO muon is associated to a DV, then
     # d_idv_to_imuon will not have a key/value for that DV index
     if ret["bestidv"] not in d_idv_to_imuon:
-        print("There are NO muons associated to this DV, which has tracksSize={}".format(dv.obj.tracksSize()))
+        print("There are NO muons associated to this DV, which has tracksSize={}".format(dv.tracksSize()))
         return ret
 
     # Need exactly 2 associated muons (no more, no less). This is satisfied by 99.9+% of DVs.
     num_associated_muons = len(d_idv_to_imuon[ret["bestidv"]])
     if num_associated_muons != 2:
-        print("There's {} muon(s) associated to this DV, which has tracksSize={}".format(num_associated_muons, dv.obj.tracksSize()))
+        print("There's {} muon(s) associated to this DV, which has tracksSize={}".format(num_associated_muons, dv.tracksSize()))
     else:
         # get indices of two muons for that DV. make sure first one has higher pT.
         ret["bestimu1"], ret["bestimu2"] = d_idv_to_imuon[ret["bestidv"]]
@@ -175,11 +193,30 @@ def pick_best_objects(dvs, muons, run, is_mc):
                 ret["secondary"] = dict(bestidv=idv2, bestimu1=imu1, bestimu2=imu2)
     return ret
 
-class ObjectWrapper(object):
-    def __init__(self, obj):
-        self.obj = obj
-        self.selected = False
+class PrintableMixin(object):
+    def __repr__(self):
+        my_attrs = self.__dict__.keys()
+        strs = []
+        for x in dir(self):
+            if x.startswith("_"): continue
+            val = getattr(self,x)
+            if x not in my_attrs: val = val()
+            if "vector" in type(val).__name__: val = list(val)
+            strs.append("{}={}".format(x,val))
+        varstr = " ".join(strs)
+        return "<{} at {}: {}>".format(self.__class__.__name__, hex(id(self)), varstr)
 
+class VertexWrapper(PrintableMixin, r.ScoutingVertex):
+    pass
+
+class MuonWrapper(PrintableMixin, r.ScoutingMuon):
+    pass
+
+def write_metadata_to_tfile(tfile, metadata):
+    # Given TFile and dict of metadata, write some TObjStrings to the file
+    for k, v in metadata.items():
+        obj = r.TString(str(v))
+        tfile.WriteObject(obj, k)
 
 class Looper(object):
 
@@ -215,6 +252,7 @@ class Looper(object):
                 }
 
         self.loaded_pixel_code = False
+        self.loaded_prop_code = False
 
         self.init_tree()
         self.init_branches()
@@ -227,8 +265,12 @@ class Looper(object):
         # alias
         ch = self.ch
 
+        print(">>> Started making TChain with {} files".format(len(self.fnames)))
+
         for fname in self.fnames:
             ch.Add(fname)
+
+        print(">>> Done making TChain")
 
         branchnames = [b.GetName() for b in ch.GetListOfBranches()]
         self.has_gen_info = any("genParticles" in name for name in branchnames)
@@ -336,6 +378,15 @@ class Looper(object):
             t1 = time.time()
             print(">>> Finished loading in {:.1f} seconds".format(t1-t0))
 
+    def load_prop_code(self):
+        if not self.loaded_prop_code:
+            print(">>> Loading propagation utilities")
+            t0 = time.time()
+            r.gROOT.ProcessLine(".L data/propagation_utils.cc")
+            self.loaded_prop_code = True
+            t1 = time.time()
+            print(">>> Finished loading in {:.1f} seconds".format(t1-t0))
+
     def get_pixel_rectangle_info(self,px,py,pz):
         if fast: return dict()
         self.load_pixel_code()
@@ -348,6 +399,19 @@ class Looper(object):
                 planedist = r.dist_to_imodule_plane(px, py, pz, imodule),
                 layernum = r.imodule_to_layernum(imodule),
                 )
+
+    def get_corrected_phi(self,muon,dv):
+        if fast: return muon.phi()
+        self.load_prop_code()
+        refx, refy, refz = get_track_reference_point(muon)
+        vec = r.TLorentzVector()
+        vec.SetPtEtaPhiM(muon.pt(), muon.eta(), muon.phi(), MUON_MASS)
+        newphi = r.recalculate_phi_at_DV(
+            refx, refy, refz, vec.Px(), vec.Py(), vec.Pz(),
+            muon.charge(),
+            dv.x(), dv.y(),
+            )
+        return newphi
 
     def init_branches(self):
 
@@ -371,16 +435,23 @@ class Looper(object):
         make_branch("dimuon_eta", "f")
         make_branch("dimuon_phi", "f")
         make_branch("dimuon_mass", "f")
+        make_branch("mass", "f")
+        make_branch("dimuon_massCorr", "f")
+        make_branch("massCorr", "f")
         make_branch("absdphimumu", "f")
         make_branch("absdphimudv", "f")
         make_branch("minabsdxy", "f")
+        make_branch("ctau", "f")
         make_branch("logabsetaphi", "f")
         make_branch("lxy", "f")
+        make_branch("lxyError", "f")
         make_branch("cosphi", "f")
         make_branch("pass_baseline", "b")
         make_branch("pass_baseline_iso", "b")
+        make_branch("pass_baseline_isohalf", "b")
         make_branch("pass_baseline_extra", "b")
         make_branch("pass_baseline_extra_iso", "b")
+        make_branch("pass_baseline_extra_isohalf", "b")
 
         make_branch("sublead_dimuon_isos", "b")
         make_branch("sublead_dimuon_mass", "f")
@@ -443,6 +514,22 @@ class Looper(object):
             make_branch(pfx+"drjet", "f")
             make_branch(pfx+"passid", "b")
             make_branch(pfx+"passiso", "b")
+            make_branch(pfx+"genMatch_pt", "f")
+            make_branch(pfx+"genMatch_eta", "f")
+            make_branch(pfx+"genMatch_phi", "f")
+            make_branch(pfx+"genMatch_m", "f")
+            make_branch(pfx+"genMatch_vx", "f")
+            make_branch(pfx+"genMatch_vy", "f")
+            make_branch(pfx+"genMatch_vz", "f")
+            make_branch(pfx+"genMatch_lxy", "f")
+            make_branch(pfx+"genMatch_status", "i")
+            make_branch(pfx+"genMatch_pdgId", "i")
+            make_branch(pfx+"genMatch_motherId", "i")
+            make_branch(pfx+"trk_refx", "f")
+            make_branch(pfx+"trk_refy", "f")
+            make_branch(pfx+"trk_refz", "f")
+            make_branch(pfx+"phiCorr", "f")
+
 
         make_branch("nGenMuon", "i")
         make_branch("GenMuon_pt", "vf")
@@ -452,6 +539,7 @@ class Looper(object):
         make_branch("GenMuon_vx", "vf")
         make_branch("GenMuon_vy", "vf")
         make_branch("GenMuon_vz", "vf")
+        make_branch("GenMuon_lxy", "vf")
         make_branch("GenMuon_status", "vi")
         make_branch("GenMuon_pdgId", "vi")
         make_branch("GenMuon_motherId", "vi")
@@ -536,16 +624,16 @@ class Looper(object):
                 branches["PVM_z"][0] = pvmz
 
             # wrap muons and DVs in custom class to embed information like expected hits
-            muons = map(ObjectWrapper, muons)
-            dvs = map(ObjectWrapper, dvs)
+            muons = map(MuonWrapper, muons)
+            dvs = map(VertexWrapper, dvs)
             if self.has_hit_info:
                 expectedhits = evt.ints_hitMaker_nexpectedhitsmultiple_SLIM.product()
                 for i,n in enumerate(expectedhits):
                     muons[i].nExpectedPixelHits = n
             for i in range(len(dvs)):
-                vx = dvs[i].obj.x()
-                vy = dvs[i].obj.y()
-                vz = dvs[i].obj.z()
+                vx = dvs[i].x()
+                vy = dvs[i].y()
+                vz = dvs[i].z()
                 dvs[i].pvmx = pvmx
                 dvs[i].pvmy = pvmy
                 dvs[i].rho = (vx**2 + vy**2)**0.5
@@ -629,75 +717,20 @@ class Looper(object):
             branches["nDV"][0] = len(selected_dvs)
             for idv, dv in enumerate(selected_dvs):
                 pfx = "DV_" if idv == 0 else "sublead_DV_"
-                branches[pfx+"x"][0] = dv.obj.x()
-                branches[pfx+"y"][0] = dv.obj.y()
-                branches[pfx+"z"][0] = dv.obj.z()
-                branches[pfx+"xError"][0] = dv.obj.xError()
-                branches[pfx+"yError"][0] = dv.obj.yError()
-                branches[pfx+"zError"][0] = dv.obj.zError()
-                branches[pfx+"chi2"][0] = dv.obj.chi2()
-                branches[pfx+"ndof"][0] = dv.obj.ndof()
+                branches[pfx+"x"][0] = dv.x()
+                branches[pfx+"y"][0] = dv.y()
+                branches[pfx+"z"][0] = dv.z()
+                branches[pfx+"xError"][0] = dv.xError()
+                branches[pfx+"yError"][0] = dv.yError()
+                branches[pfx+"zError"][0] = dv.zError()
+                branches[pfx+"chi2"][0] = dv.chi2()
+                branches[pfx+"ndof"][0] = dv.ndof()
                 branches[pfx+"rho"][0] = dv.rho
                 branches[pfx+"rhoCorr"][0] = dv.rhoCorr
                 branches[pfx+"inPixel"][0] = dv.inPixel
                 branches[pfx+"distPixel"][0] = dv.distPixel
                 branches[pfx+"layerPixel"][0] = dv.layerPixel
                 branches[pfx+"passid"][0] = dv.passid
-
-            ########################################
-            ######### # Fill Muon branches #########
-            ########################################
-            branches["nMuon_raw"][0] = len(muons)
-            branches["nMuon"][0] = len(selected_muons)
-            for imuon,(pfx,muon) in enumerate(zip(["Muon1_", "Muon2_", "sublead_Muon1_", "sublead_Muon2_"], selected_muons)):
-                pt = muon.obj.pt()
-                eta = muon.obj.eta()
-                phi = muon.obj.phi()
-                branches[pfx+"pt"][0] = pt
-                branches[pfx+"eta"][0] = eta
-                branches[pfx+"phi"][0] = phi
-                branches[pfx+"m"][0] = MUON_MASS
-                branches[pfx+"trackIso"][0] = muon.obj.trackIso()
-                branches[pfx+"chi2"][0] = muon.obj.chi2()
-                branches[pfx+"ndof"][0] = muon.obj.ndof()
-                branches[pfx+"charge"][0] = muon.obj.charge()
-                branches[pfx+"dxy"][0] = muon.obj.dxy()
-                branches[pfx+"dz"][0] = muon.obj.dz()
-                branches[pfx+"nValidMuonHits"][0] = muon.obj.nValidMuonHits()
-                branches[pfx+"nValidPixelHits"][0] = muon.obj.nValidPixelHits()
-                branches[pfx+"nMatchedStations"][0] = muon.obj.nMatchedStations()
-                branches[pfx+"nTrackerLayersWithMeasurement"][0] = muon.obj.nTrackerLayersWithMeasurement()
-                branches[pfx+"nValidStripHits"][0] = muon.obj.nValidStripHits()
-                branches[pfx+"dxyError"][0] = muon.obj.dxyError()
-                branches[pfx+"dzError"][0] = muon.obj.dzError()
-                branches[pfx+"nExpectedPixelHits"][0] = muon.nExpectedPixelHits
-
-                # find index of jet that is closest to this muon. `sorted_etaphis`: [(index, (eta,phi)), ...]
-                jetIdx1, drjet = -1, 999.
-                sorted_etaphis = sorted(enumerate(jet_etaphis), key=lambda x: math.hypot(eta-x[1][0], delta_phi(phi,x[1][1])))
-                if len(sorted_etaphis) > 0: jetIdx1 = sorted_etaphis[0][0]
-                if jetIdx1 >= 0:
-                    jeteta, jetphi = sorted_etaphis[0][1]
-                    drjet = math.hypot(eta-jeteta,delta_phi(phi,jetphi))
-                branches[pfx+"drjet"][0] = drjet
-
-                # get appropriate DV for this muon (order matches selected_dvs, with 2 muons per dv)
-                dv = selected_dvs[1 if imuon >= 2 else 0]
-                # https://github.com/cms-sw/cmssw/blob/master/DataFormats/TrackReco/interface/TrackBase.h#L24
-                muon.dxyCorr = -(dv.obj.x()-pvmx)*math.sin(muon.obj.phi()) + (dv.obj.y()-pvmy)*math.cos(muon.obj.phi())
-                branches[pfx+"dxyCorr"][0] = muon.dxyCorr
-
-                # nMatchedStations hardcoded to 0 in 2017 HLT code:
-                # https://github.com/cms-sw/cmssw/blob/CMSSW_9_2_10/HLTrigger/Muon/src/HLTScoutingMuonProducer.cc#L161
-                # and nValidMuonHits also 0, so we scrap this cut, even for 2018, for simplicity
-                muon.passid = (
-                        (muon.obj.chi2()/muon.obj.ndof() < 3.0) and
-                        # (muon.nValidMuonHits() > 0) and
-                        (muon.obj.nTrackerLayersWithMeasurement() > 5)
-                        )
-                muon.passiso = ((muon.obj.trackIso() < 0.1) and  (drjet > 0.3))
-                branches[pfx+"passid"][0] = muon.passid
-                branches[pfx+"passiso"][0] = muon.passiso
 
             ########################################
             ####### # Fill Gen muon branches #######
@@ -711,14 +744,15 @@ class Looper(object):
             nGenMuon = 0
             nFiducialMuon = 0
             nFiducialMuon_norho = 0
+            genmuons = []
             for genpart in genparts:
                 pdgid = genpart.pdgId()
-                if abs(pdgid) not in [13,23,25,6000211]: continue
+                if abs(pdgid) not in [13,23,25,6000211,3000022,999999,1999999]: continue
                 motheridx = genpart.motherRef().index()
                 mother = genparts[motheridx]
                 motherid = mother.pdgId()
-                # For the useful muons, ALSO store them in separate GenMuon branches to avoid reading a lot of extra junk
-                if ((motherid == 23) or (motherid == 6000211)) and (abs(pdgid)==13): 
+                # For the useful muons, store them in GenMuon branches to avoid reading a lot of extra junk
+                if (motherid in [23, 6000211, 999999, 1999999, 3000022]) and (abs(pdgid)==13): 
                     branches["GenMuon_pt"].push_back(genpart.pt())
                     branches["GenMuon_eta"].push_back(genpart.eta())
                     branches["GenMuon_phi"].push_back(genpart.phi())
@@ -726,82 +760,193 @@ class Looper(object):
                     branches["GenMuon_vx"].push_back(genpart.vx())
                     branches["GenMuon_vy"].push_back(genpart.vy())
                     branches["GenMuon_vz"].push_back(genpart.vz())
+                    branches["GenMuon_lxy"].push_back(math.hypot(genpart.vx(), genpart.vy()))
                     branches["GenMuon_status"].push_back(genpart.status())
                     branches["GenMuon_pdgId"].push_back(pdgid)
                     branches["GenMuon_motherId"].push_back(motherid)
-                    if (genpart.pt() > 4.) and (abs(genpart.eta()) < 2.4):
+                    if (genpart.pt() > 3.) and (abs(genpart.eta()) < 2.4):
                         nFiducialMuon_norho += 1
                         if (math.hypot(genpart.vx(),genpart.vy())<11.):
                             nFiducialMuon += 1
                     nGenMuon += 1
+                    genmuons.append(genpart)
             branches["nGenMuon"][0] = nGenMuon
             branches["pass_fiducialgen"][0] = (nFiducialMuon >= 2) or (not self.is_mc)
             branches["pass_fiducialgen_norho"][0] = (nFiducialMuon_norho >= 2) or (not self.is_mc)
 
 
             ########################################
+            ######### # Fill Muon branches #########
+            ########################################
+            branches["nMuon_raw"][0] = len(muons)
+            branches["nMuon"][0] = len(selected_muons)
+            for imuon,(pfx,muon) in enumerate(zip(["Muon1_", "Muon2_", "sublead_Muon1_", "sublead_Muon2_"], selected_muons)):
+                pt = muon.pt()
+                eta = muon.eta()
+                phi = muon.phi()
+                branches[pfx+"pt"][0] = pt
+                branches[pfx+"eta"][0] = eta
+                branches[pfx+"phi"][0] = phi
+                branches[pfx+"m"][0] = MUON_MASS
+                branches[pfx+"trackIso"][0] = muon.trackIso()
+                branches[pfx+"chi2"][0] = muon.chi2()
+                branches[pfx+"ndof"][0] = muon.ndof()
+                branches[pfx+"charge"][0] = muon.charge()
+                branches[pfx+"dxy"][0] = muon.dxy()
+                branches[pfx+"dz"][0] = muon.dz()
+                branches[pfx+"nValidMuonHits"][0] = muon.nValidMuonHits()
+                branches[pfx+"nValidPixelHits"][0] = muon.nValidPixelHits()
+                branches[pfx+"nMatchedStations"][0] = muon.nMatchedStations()
+                branches[pfx+"nTrackerLayersWithMeasurement"][0] = muon.nTrackerLayersWithMeasurement()
+                branches[pfx+"nValidStripHits"][0] = muon.nValidStripHits()
+                branches[pfx+"dxyError"][0] = muon.dxyError()
+                branches[pfx+"dzError"][0] = muon.dzError()
+                branches[pfx+"nExpectedPixelHits"][0] = muon.nExpectedPixelHits
+
+                # find index of jet that is closest to this muon. `sorted_etaphis`: [(index, (eta,phi)), ...]
+                jetIdx1, drjet = -1, 999.
+                sorted_etaphis = sorted(enumerate(jet_etaphis), key=lambda x: math.hypot(eta-x[1][0], delta_phi(phi,x[1][1])))
+                if len(sorted_etaphis) > 0: jetIdx1 = sorted_etaphis[0][0]
+                if jetIdx1 >= 0:
+                    jeteta, jetphi = sorted_etaphis[0][1]
+                    drjet = math.hypot(eta-jeteta,delta_phi(phi,jetphi))
+                branches[pfx+"drjet"][0] = drjet
+
+
+                # get appropriate DV for this muon (order matches selected_dvs, with 2 muons per dv)
+                dv = selected_dvs[1 if imuon >= 2 else 0]
+                # https://github.com/cms-sw/cmssw/blob/master/DataFormats/TrackReco/interface/TrackBase.h#L24
+                muon.dxyCorr = -(dv.x()-pvmx)*math.sin(muon.phi()) + (dv.y()-pvmy)*math.cos(muon.phi())
+                branches[pfx+"dxyCorr"][0] = muon.dxyCorr
+
+                refx, refy, refz = get_track_reference_point(muon)
+                branches[pfx+"trk_refx"][0] = refx
+                branches[pfx+"trk_refy"][0] = refy
+                branches[pfx+"trk_refz"][0] = refz
+
+                muon.phi_corr = self.get_corrected_phi(muon,dv)
+                branches[pfx+"phiCorr"][0] = muon.phi_corr
+
+
+                # nMatchedStations hardcoded to 0 in 2017 HLT code:
+                # https://github.com/cms-sw/cmssw/blob/CMSSW_9_2_10/HLTrigger/Muon/src/HLTScoutingMuonProducer.cc#L161
+                # and nValidMuonHits also 0, so we scrap this cut, even for 2018, for simplicity
+                muon.passid = (
+                        (muon.chi2()/muon.ndof() < 3.0) and
+                        # (muon.nValidMuonHits() > 0) and
+                        (muon.nTrackerLayersWithMeasurement() > 5)
+                        # (muon.dxyError() < 0.01)
+                        )
+                muon.passiso = ((muon.trackIso() < 0.1) and  (drjet > 0.3))
+                branches[pfx+"passid"][0] = muon.passid
+                branches[pfx+"passiso"][0] = muon.passiso
+
+                # Find closest GenMuon by DeltaR and also embed the info into the muon branches for convenience
+                matched_genmu = None
+                sorted_genmuons = sorted(genmuons, key=lambda x: math.hypot(eta-x.eta(), delta_phi(phi,x.phi())))
+                if len(sorted_genmuons) > 0:
+                    matched_genmu = sorted_genmuons[0]
+                if matched_genmu is not None:
+                    motheridx = matched_genmu.motherRef().index()
+                    mother = genparts[motheridx]
+                    motherid = matched_genmu.pdgId()
+                    branches[pfx+"genMatch_pt"][0] = matched_genmu.pt()
+                    branches[pfx+"genMatch_eta"][0] = matched_genmu.eta()
+                    branches[pfx+"genMatch_phi"][0] = matched_genmu.phi()
+                    branches[pfx+"genMatch_m"][0] = matched_genmu.mass()
+                    branches[pfx+"genMatch_vx"][0] = matched_genmu.vx()
+                    branches[pfx+"genMatch_vy"][0] = matched_genmu.vy()
+                    branches[pfx+"genMatch_vz"][0] = matched_genmu.vz()
+                    branches[pfx+"genMatch_lxy"][0] = math.hypot(matched_genmu.vx(), matched_genmu.vy())
+                    branches[pfx+"genMatch_status"][0] = matched_genmu.status()
+                    branches[pfx+"genMatch_pdgId"][0] = matched_genmu.pdgId()
+                    branches[pfx+"genMatch_motherId"][0] = motherid
+
+
+            ########################################
             ### # Fill more event level branches ###
             ########################################
 
-            mu1 = selected_muons[0]
-            mu2 = selected_muons[1]
-            dv = selected_dvs[0]
-            mu1p4 = r.TLorentzVector()
-            mu2p4 = r.TLorentzVector()
-            mu1p4.SetPtEtaPhiM(mu1.obj.pt(), mu1.obj.eta(), mu1.obj.phi(), MUON_MASS)
-            mu2p4.SetPtEtaPhiM(mu2.obj.pt(), mu2.obj.eta(), mu2.obj.phi(), MUON_MASS)
-            dimuon = (mu1p4+mu2p4)
-            vecdv2d = r.TVector2(dv.obj.x()-pvmx, dv.obj.y()-pvmy)
-            vecdimuon2d = r.TVector2(dimuon.Px(),dimuon.Py())
-            cosphi = (vecdv2d.Px()*vecdimuon2d.Px() + vecdv2d.Py()*vecdimuon2d.Py()) / (vecdv2d.Mod()*vecdimuon2d.Mod())
-            # definition on s2 of https://indico.cern.ch/event/846681/contributions/3557724/attachments/1907377/3150380/Displaced_Scouting_Status_Update.pdf
-            # rutgers lxy is lowercase lxy from that set of slides, which does not have the cosine term
-            lxy = vecdv2d.Mod()
+            if len(selected_dvs) >= 1 and len(selected_muons) >= 2:
+                mu1 = selected_muons[0]
+                mu2 = selected_muons[1]
+                dv = selected_dvs[0]
+                mu1p4 = r.TLorentzVector()
+                mu2p4 = r.TLorentzVector()
+                mu1p4.SetPtEtaPhiM(mu1.pt(), mu1.eta(), mu1.phi(), MUON_MASS)
+                mu2p4.SetPtEtaPhiM(mu2.pt(), mu2.eta(), mu2.phi(), MUON_MASS)
+                dimuon = (mu1p4+mu2p4)
+                vecdv2d = r.TVector2(dv.x()-pvmx, dv.y()-pvmy)
+                vecdimuon2d = r.TVector2(dimuon.Px(),dimuon.Py())
+                cosphi = (vecdv2d.Px()*vecdimuon2d.Px() + vecdv2d.Py()*vecdimuon2d.Py()) / (vecdv2d.Mod()*vecdimuon2d.Mod())
+                # definition on s2 of https://indico.cern.ch/event/846681/contributions/3557724/attachments/1907377/3150380/Displaced_Scouting_Status_Update.pdf
+                # rutgers lxy is lowercase lxy from that set of slides, which does not have the cosine term
+                lxy = vecdv2d.Mod()
+                logabsetaphi = math.log10(max(abs(mu1p4.Eta()-mu2p4.Eta()),1e-6)/max(abs(mu1p4.DeltaPhi(mu2p4)),1e-6))
 
-            absdphimumu = abs(mu1p4.DeltaPhi(mu2p4))
-            absdphimudv = abs(vecdimuon2d.DeltaPhi(vecdv2d))
-            dimuon_isos = mu1.obj.charge()*mu2.obj.charge() < 0
-            branches["dimuon_isos"][0] = dimuon_isos
-            branches["dimuon_pt"][0] = dimuon.Pt()
-            branches["dimuon_eta"][0] = dimuon.Eta()
-            branches["dimuon_phi"][0] = dimuon.Phi()
-            branches["dimuon_mass"][0] = dimuon.M()
-            branches["absdphimumu"][0] = absdphimumu
-            branches["absdphimudv"][0] = absdphimudv
-            branches["minabsdxy"][0] = min(abs(mu1.dxyCorr),abs(mu2.dxyCorr))
-            branches["logabsetaphi"][0] = math.log10(max(abs(mu1p4.Eta()-mu2p4.Eta()),1e-6)/max(abs(mu1p4.DeltaPhi(mu2p4)),1e-6))
-            branches["cosphi"][0] = cosphi
-            branches["lxy"][0] = lxy
+                # corrected p4s with phi calculated at DV instead of track reference point.
+                mu1p4_corr = r.TLorentzVector()
+                mu2p4_corr = r.TLorentzVector()
+                mu1p4_corr.SetPtEtaPhiM(mu1.pt(), mu1.eta(), mu1.phi_corr, MUON_MASS)
+                mu2p4_corr.SetPtEtaPhiM(mu2.pt(), mu2.eta(), mu2.phi_corr, MUON_MASS)
+                dimuon_corr = (mu1p4_corr+mu2p4_corr)
 
-            # both muons need to have no excess hits if the displacement is >3.5cm (otherwise we're within the 1st bpix layer and extra hits don't make sense to calculate)
-            pass_excesshits = (
-                    (lxy < 3.5) or 
-                        ( (mu1.obj.nValidPixelHits() - mu1.nExpectedPixelHits <= 0) and
-                          (mu2.obj.nValidPixelHits() - mu2.nExpectedPixelHits <= 0)
+                absdphimumu = abs(mu1p4.DeltaPhi(mu2p4))
+                absdphimudv = abs(vecdimuon2d.DeltaPhi(vecdv2d))
+                dimuon_isos = mu1.charge()*mu2.charge() < 0
+                branches["dimuon_isos"][0] = dimuon_isos
+                branches["dimuon_pt"][0] = dimuon.Pt()
+                branches["dimuon_eta"][0] = dimuon.Eta()
+                branches["dimuon_phi"][0] = dimuon.Phi()
+                branches["dimuon_mass"][0] = dimuon.M()
+                branches["mass"][0] = dimuon.M()
+                branches["dimuon_massCorr"][0] = dimuon_corr.M()
+                branches["massCorr"][0] = dimuon_corr.M()
+                branches["absdphimumu"][0] = absdphimumu
+                branches["absdphimudv"][0] = absdphimudv
+                branches["minabsdxy"][0] = min(abs(mu1.dxyCorr),abs(mu2.dxyCorr))
+                branches["ctau"][0] = lxy*cosphi*dimuon.M()/dimuon.Pt()
+                branches["logabsetaphi"][0] = logabsetaphi
+                branches["cosphi"][0] = cosphi
+                branches["lxy"][0] = lxy
+                branches["lxyError"][0] = ((dv.xError()*(dv.x()-pvmx))**2 + (dv.yError()*(dv.y()-pvmy))**2)**0.5 / lxy
+
+                # both muons need to have no excess hits if the displacement is >3.5cm (otherwise we're within the 1st bpix layer and extra hits don't make sense to calculate)
+                pass_excesshits = (
+                        (lxy < 3.5) or 
+                            ( (mu1.nValidPixelHits() - mu1.nExpectedPixelHits <= 0) and
+                              (mu2.nValidPixelHits() - mu2.nExpectedPixelHits <= 0)
+                            )
                         )
-                    )
-            branches["pass_excesshits"][0] = pass_excesshits
+                branches["pass_excesshits"][0] = pass_excesshits
 
-            pass_materialveto = (dv.distPixel > 0.05)
-            branches["pass_materialveto"][0] = pass_materialveto
+                pass_materialveto = (dv.distPixel > 0.05)
+                branches["pass_materialveto"][0] = pass_materialveto
 
-            # Baseline selection
-            pass_baseline = (
-                    True
-                    and mu1.passid
-                    and mu2.passid
-                    and (cosphi > 0)
-                    and (absdphimumu < 2.8)
-                    and (absdphimudv < 0.02)
-                    and dimuon_isos
-                    and pass_l1
-                    and (lxy < 11.)
-                    )
-            pass_baseline_iso = pass_baseline and (mu1.passiso and mu2.passiso)
-            branches["pass_baseline"][0] = pass_baseline
-            branches["pass_baseline_iso"][0] = pass_baseline_iso
-            branches["pass_baseline_extra"][0] = pass_baseline and (pass_excesshits and pass_materialveto)
-            branches["pass_baseline_extra_iso"][0] = pass_baseline_iso and (pass_excesshits and pass_materialveto)
+                # Baseline selection
+                pass_baseline = (
+                        True
+                        and mu1.passid
+                        and mu2.passid
+                        and (cosphi > 0)
+                        and (absdphimumu < 2.8)
+                        and (absdphimudv < 0.02)
+                        and dimuon_isos
+                        and pass_l1
+                        and (lxy < 11.)
+                        )
+                pass_baseline_iso = pass_baseline and (mu1.passiso and mu2.passiso)
+                pass_baseline_isohalf = pass_baseline and (mu1.passiso ^ mu2.passiso)
+
+                branches["pass_baseline"][0] = pass_baseline
+                branches["pass_baseline_iso"][0] = pass_baseline_iso
+                branches["pass_baseline_isohalf"][0] = pass_baseline_isohalf
+
+                # baseline+"extra" is baseline with pixel requirements and logabsetaphi<1.25
+                pass_extra = pass_excesshits and pass_materialveto and (logabsetaphi < 1.25)
+                branches["pass_baseline_extra"][0] = pass_baseline and pass_extra
+                branches["pass_baseline_extra_iso"][0] = pass_baseline_iso and pass_extra
+                branches["pass_baseline_extra_isohalf"][0] = pass_baseline_isohalf and pass_extra
 
             # Fill some branches for subleading DV and associated muons, if they exist
             if len(selected_dvs) >= 2 and len(selected_muons) >= 4:
@@ -810,12 +955,12 @@ class Looper(object):
                 dv = selected_dvs[1]
                 mu1p4 = r.TLorentzVector()
                 mu2p4 = r.TLorentzVector()
-                mu1p4.SetPtEtaPhiM(mu1.obj.pt(), mu1.obj.eta(), mu1.obj.phi(), MUON_MASS)
-                mu2p4.SetPtEtaPhiM(mu2.obj.pt(), mu2.obj.eta(), mu2.obj.phi(), MUON_MASS)
+                mu1p4.SetPtEtaPhiM(mu1.pt(), mu1.eta(), mu1.phi(), MUON_MASS)
+                mu2p4.SetPtEtaPhiM(mu2.pt(), mu2.eta(), mu2.phi(), MUON_MASS)
                 dimuon = (mu1p4+mu2p4)
-                vecdv2d = r.TVector2(dv.obj.x()-pvmx, dv.obj.y()-pvmy)
+                vecdv2d = r.TVector2(dv.x()-pvmx, dv.y()-pvmy)
                 lxy = vecdv2d.Mod()
-                dimuon_isos = mu1.obj.charge()*mu2.obj.charge() < 0
+                dimuon_isos = mu1.charge()*mu2.charge() < 0
                 branches["sublead_dimuon_isos"][0] = dimuon_isos
                 branches["sublead_dimuon_mass"][0] = dimuon.M()
                 branches["sublead_logabsetaphi"][0] = math.log10(max(abs(mu1p4.Eta()-mu2p4.Eta()),1e-6)/max(abs(mu1p4.DeltaPhi(mu2p4)),1e-6))
@@ -835,6 +980,20 @@ class Looper(object):
         r.TParameter(int)("nevents_processed",ievt).Write()
         # number of events in the output tree
         r.TParameter(int)("nevents_output",self.outtree.GetEntries()).Write()
+
+        # # Embed babymaking code inside root file
+        # metadata = dict(
+        #         # babymaker code
+        #         babymaker = open(__file__,"r").read(),
+        #         # number of events in the input chain
+        #         nevents_input = nevents_in,
+        #         # number of events we actually looped over
+        #         nevents_processed = ievt,
+        #         # number of events in the output tree
+        #         nevents_output = self.outtree.GetEntries(),
+        #         input_fnames = ",".join(self.fnames),
+        #         )
+        # write_metadata_to_tfile(self.outfile, metadata)
 
         self.outfile.Close()
 
