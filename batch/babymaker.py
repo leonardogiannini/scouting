@@ -225,7 +225,6 @@ class Looper(object):
             fnames = sum(map(glob.glob,fnames),[])
         self.fnames = map(xrootdify,sum(map(lambda x:x.split(","),fnames),[]))
         self.nevents = nevents
-        self.do_jets = True
         self.do_tracks = False
         self.is_mc = False
         self.has_gen_info = False
@@ -424,10 +423,13 @@ class Looper(object):
         make_branch("year", "i")
 
         make_branch("pass_l1", "b")
-        make_branch("pass_fiducialgen", "b")
+        # make_branch("pass_fiducialgen", "b")
         make_branch("pass_excesshits", "b")
         make_branch("pass_materialveto", "b")
-        make_branch("pass_fiducialgen_norho", "b")
+        make_branch("pass_dxyscaled", "b")
+        make_branch("pass_dxysig", "b")
+        # make_branch("pass_fiducialgen_norho", "b")
+        make_branch("pass_genmatch", "b")
 
         # more event level
         make_branch("dimuon_isos", "b")
@@ -436,8 +438,7 @@ class Looper(object):
         make_branch("dimuon_phi", "f")
         make_branch("dimuon_mass", "f")
         make_branch("mass", "f")
-        make_branch("dimuon_massCorr", "f")
-        make_branch("massCorr", "f")
+        make_branch("dimuon_massRaw", "f")
         make_branch("absdphimumu", "f")
         make_branch("absdphimudv", "f")
         make_branch("minabsdxy", "f")
@@ -488,6 +489,12 @@ class Looper(object):
         make_branch("PVM_ndof", "i")
 
         make_branch("nJet", "i")
+        make_branch("Jet_pt", "vf")
+        make_branch("Jet_eta", "vf")
+        make_branch("Jet_phi", "vf")
+        make_branch("Jet_m", "vf")
+        make_branch("Jet_mvaDiscriminator", "vf")
+        make_branch("Jet_btagDiscriminator", "vf")
 
         make_branch("nMuon_raw", "i")
         make_branch("nMuon", "i")
@@ -514,6 +521,7 @@ class Looper(object):
             make_branch(pfx+"drjet", "f")
             make_branch(pfx+"passid", "b")
             make_branch(pfx+"passiso", "b")
+            make_branch(pfx+"genMatch_dr", "f")
             make_branch(pfx+"genMatch_pt", "f")
             make_branch(pfx+"genMatch_eta", "f")
             make_branch(pfx+"genMatch_phi", "f")
@@ -525,11 +533,33 @@ class Looper(object):
             make_branch(pfx+"genMatch_status", "i")
             make_branch(pfx+"genMatch_pdgId", "i")
             make_branch(pfx+"genMatch_motherId", "i")
+            make_branch(pfx+"genMatch_mothervx", "f")
+            make_branch(pfx+"genMatch_mothervy", "f")
+            make_branch(pfx+"genMatch_mothervz", "f")
             make_branch(pfx+"trk_refx", "f")
             make_branch(pfx+"trk_refy", "f")
             make_branch(pfx+"trk_refz", "f")
             make_branch(pfx+"phiCorr", "f")
 
+            make_branch(pfx+"trk_qoverp", "f")
+            make_branch(pfx+"trk_lambda", "f")
+            make_branch(pfx+"trk_qoverpError", "f")
+            make_branch(pfx+"trk_lambdaError", "f")
+            make_branch(pfx+"trk_phiError", "f")
+            make_branch(pfx+"trk_dsz", "f")
+            make_branch(pfx+"trk_dszError", "f")
+
+        make_branch("GenOther_pt", "vf")
+        make_branch("GenOther_eta", "vf")
+        make_branch("GenOther_phi", "vf")
+        make_branch("GenOther_m", "vf")
+        make_branch("GenOther_vx", "vf")
+        make_branch("GenOther_vy", "vf")
+        make_branch("GenOther_vz", "vf")
+        make_branch("GenOther_lxy", "vf")
+        make_branch("GenOther_status", "vi")
+        make_branch("GenOther_pdgId", "vi")
+        make_branch("GenOther_motherId", "vi")
 
         make_branch("nGenMuon", "i")
         make_branch("GenMuon_pt", "vf")
@@ -709,6 +739,12 @@ class Looper(object):
             jet_etaphis = []
             for jet in jets:
                 jet_etaphis.append((jet.eta(),jet.phi()))
+                branches["Jet_pt"].push_back(jet.pt())
+                branches["Jet_eta"].push_back(jet.eta())
+                branches["Jet_phi"].push_back(jet.phi())
+                branches["Jet_m"].push_back(jet.m())
+                branches["Jet_mvaDiscriminator"].push_back(jet.mvaDiscriminator())
+                branches["Jet_btagDiscriminator"].push_back(jet.btagDiscriminator())
 
             ########################################
             ########## # Fill DV branches ##########
@@ -742,8 +778,8 @@ class Looper(object):
                 except:
                     pass
             nGenMuon = 0
-            nFiducialMuon = 0
-            nFiducialMuon_norho = 0
+            # nFiducialMuon = 0
+            # nFiducialMuon_norho = 0
             genmuons = []
             for genpart in genparts:
                 pdgid = genpart.pdgId()
@@ -751,6 +787,18 @@ class Looper(object):
                 motheridx = genpart.motherRef().index()
                 mother = genparts[motheridx]
                 motherid = mother.pdgId()
+                if abs(pdgid) in [23,25,6000211,3000022,999999,1999999]: # "exotic" except muons
+                    branches["GenOther_pt"].push_back(genpart.pt())
+                    branches["GenOther_eta"].push_back(genpart.eta())
+                    branches["GenOther_phi"].push_back(genpart.phi())
+                    branches["GenOther_m"].push_back(genpart.mass())
+                    branches["GenOther_vx"].push_back(genpart.vx())
+                    branches["GenOther_vy"].push_back(genpart.vy())
+                    branches["GenOther_vz"].push_back(genpart.vz())
+                    branches["GenOther_lxy"].push_back(math.hypot(genpart.vx(), genpart.vy()))
+                    branches["GenOther_status"].push_back(genpart.status())
+                    branches["GenOther_pdgId"].push_back(pdgid)
+                    branches["GenOther_motherId"].push_back(motherid)
                 # For the useful muons, store them in GenMuon branches to avoid reading a lot of extra junk
                 if (motherid in [23, 6000211, 999999, 1999999, 3000022]) and (abs(pdgid)==13): 
                     branches["GenMuon_pt"].push_back(genpart.pt())
@@ -764,15 +812,15 @@ class Looper(object):
                     branches["GenMuon_status"].push_back(genpart.status())
                     branches["GenMuon_pdgId"].push_back(pdgid)
                     branches["GenMuon_motherId"].push_back(motherid)
-                    if (genpart.pt() > 3.) and (abs(genpart.eta()) < 2.4):
-                        nFiducialMuon_norho += 1
-                        if (math.hypot(genpart.vx(),genpart.vy())<11.):
-                            nFiducialMuon += 1
+                    # if (genpart.pt() > 3.) and (abs(genpart.eta()) < 2.4):
+                    #     nFiducialMuon_norho += 1
+                    #     if (math.hypot(genpart.vx(),genpart.vy())<11.):
+                    #         nFiducialMuon += 1
                     nGenMuon += 1
                     genmuons.append(genpart)
             branches["nGenMuon"][0] = nGenMuon
-            branches["pass_fiducialgen"][0] = (nFiducialMuon >= 2) or (not self.is_mc)
-            branches["pass_fiducialgen_norho"][0] = (nFiducialMuon_norho >= 2) or (not self.is_mc)
+            # branches["pass_fiducialgen"][0] = (nFiducialMuon >= 2) or (not self.is_mc)
+            # branches["pass_fiducialgen_norho"][0] = (nFiducialMuon_norho >= 2) or (not self.is_mc)
 
 
             ########################################
@@ -802,6 +850,14 @@ class Looper(object):
                 branches[pfx+"dxyError"][0] = muon.dxyError()
                 branches[pfx+"dzError"][0] = muon.dzError()
                 branches[pfx+"nExpectedPixelHits"][0] = muon.nExpectedPixelHits
+
+                branches[pfx+"trk_qoverp"][0] = muon.trk_qoverp()
+                branches[pfx+"trk_lambda"][0] = muon.trk_lambda()
+                branches[pfx+"trk_qoverpError"][0] = muon.trk_qoverpError()
+                branches[pfx+"trk_lambdaError"][0] = muon.trk_lambdaError()
+                branches[pfx+"trk_phiError"][0] = muon.trk_phiError()
+                branches[pfx+"trk_dsz"][0] = muon.trk_dsz()
+                branches[pfx+"trk_dszError"][0] = muon.trk_dszError()
 
                 # find index of jet that is closest to this muon. `sorted_etaphis`: [(index, (eta,phi)), ...]
                 jetIdx1, drjet = -1, 999.
@@ -843,13 +899,14 @@ class Looper(object):
 
                 # Find closest GenMuon by DeltaR and also embed the info into the muon branches for convenience
                 matched_genmu = None
-                sorted_genmuons = sorted(genmuons, key=lambda x: math.hypot(eta-x.eta(), delta_phi(phi,x.phi())))
+                calc_dr = lambda x: math.hypot(eta-x.eta(), delta_phi(phi,x.phi()))
+                sorted_genmuons = sorted(genmuons, key=calc_dr)
                 if len(sorted_genmuons) > 0:
                     matched_genmu = sorted_genmuons[0]
+                muon.genMatch_dr = 999.
                 if matched_genmu is not None:
-                    motheridx = matched_genmu.motherRef().index()
-                    mother = genparts[motheridx]
-                    motherid = matched_genmu.pdgId()
+                    muon.genMatch_dr = calc_dr(matched_genmu)
+                    branches[pfx+"genMatch_dr"][0] = muon.genMatch_dr
                     branches[pfx+"genMatch_pt"][0] = matched_genmu.pt()
                     branches[pfx+"genMatch_eta"][0] = matched_genmu.eta()
                     branches[pfx+"genMatch_phi"][0] = matched_genmu.phi()
@@ -860,7 +917,27 @@ class Looper(object):
                     branches[pfx+"genMatch_lxy"][0] = math.hypot(matched_genmu.vx(), matched_genmu.vy())
                     branches[pfx+"genMatch_status"][0] = matched_genmu.status()
                     branches[pfx+"genMatch_pdgId"][0] = matched_genmu.pdgId()
-                    branches[pfx+"genMatch_motherId"][0] = motherid
+                    # find non-muon mother recursively 
+                    mother = matched_genmu
+                    found = False
+                    for _ in range(10):
+                        motheridx = mother.motherRef().index()
+                        mother = genparts[motheridx]
+                        motherid = mother.pdgId()
+                        # stop recursing if we found a non-muon
+                        if abs(motherid) != 13:
+                            found = True
+                            break
+                    if found:
+                        branches[pfx+"genMatch_motherId"][0] = mother.pdgId()
+                        branches[pfx+"genMatch_mothervx"][0] = mother.vx()
+                        branches[pfx+"genMatch_mothervy"][0] = mother.vy()
+                        branches[pfx+"genMatch_mothervz"][0] = mother.vz()
+                    else:
+                        branches[pfx+"genMatch_motherId"][0] = 0
+                        branches[pfx+"genMatch_mothervx"][0] = 0.
+                        branches[pfx+"genMatch_mothervy"][0] = 0.
+                        branches[pfx+"genMatch_mothervz"][0] = 0.
 
 
             ########################################
@@ -891,21 +968,22 @@ class Looper(object):
                 mu2p4_corr.SetPtEtaPhiM(mu2.pt(), mu2.eta(), mu2.phi_corr, MUON_MASS)
                 dimuon_corr = (mu1p4_corr+mu2p4_corr)
 
+                ctau = lxy*cosphi*dimuon_corr.M()/dimuon_corr.Pt()
+
                 absdphimumu = abs(mu1p4.DeltaPhi(mu2p4))
                 absdphimudv = abs(vecdimuon2d.DeltaPhi(vecdv2d))
                 dimuon_isos = mu1.charge()*mu2.charge() < 0
                 branches["dimuon_isos"][0] = dimuon_isos
-                branches["dimuon_pt"][0] = dimuon.Pt()
-                branches["dimuon_eta"][0] = dimuon.Eta()
-                branches["dimuon_phi"][0] = dimuon.Phi()
-                branches["dimuon_mass"][0] = dimuon.M()
-                branches["mass"][0] = dimuon.M()
-                branches["dimuon_massCorr"][0] = dimuon_corr.M()
-                branches["massCorr"][0] = dimuon_corr.M()
+                branches["dimuon_pt"][0] = dimuon_corr.Pt()
+                branches["dimuon_eta"][0] = dimuon_corr.Eta()
+                branches["dimuon_phi"][0] = dimuon_corr.Phi()
+                branches["dimuon_mass"][0] = dimuon_corr.M()
+                branches["mass"][0] = dimuon_corr.M()
+                branches["dimuon_massRaw"][0] = dimuon.M()
                 branches["absdphimumu"][0] = absdphimumu
                 branches["absdphimudv"][0] = absdphimudv
                 branches["minabsdxy"][0] = min(abs(mu1.dxyCorr),abs(mu2.dxyCorr))
-                branches["ctau"][0] = lxy*cosphi*dimuon.M()/dimuon.Pt()
+                branches["ctau"][0] = ctau
                 branches["logabsetaphi"][0] = logabsetaphi
                 branches["cosphi"][0] = cosphi
                 branches["lxy"][0] = lxy
@@ -920,15 +998,28 @@ class Looper(object):
                         )
                 branches["pass_excesshits"][0] = pass_excesshits
 
+                branches["pass_genmatch"][0] = ((mu1.genMatch_dr < 0.1) and (mu2.genMatch_dr < 0.1)) or (not self.is_mc)
+
                 pass_materialveto = (dv.distPixel > 0.05)
                 branches["pass_materialveto"][0] = pass_materialveto
+
+                pass_dxyscaled = (
+                        (abs(mu1.dxyCorr/(lxy*dimuon_corr.M()/dimuon_corr.Pt())) > 0.1) and
+                        (abs(mu2.dxyCorr/(lxy*dimuon_corr.M()/dimuon_corr.Pt())) > 0.1)
+                        )
+                branches["pass_dxyscaled"][0] = pass_dxyscaled
+                pass_dxysig = (
+                        (abs(mu1.dxyCorr/mu1.dxyError()) > 2) and
+                        (abs(mu2.dxyCorr/mu2.dxyError()) > 2)
+                        )
+                branches["pass_dxysig"][0] = pass_dxysig
 
                 # Baseline selection
                 pass_baseline = (
                         True
                         and mu1.passid
                         and mu2.passid
-                        and (cosphi > 0)
+                        # and (cosphi > 0) # redundant with absdphimudv cut
                         and (absdphimumu < 2.8)
                         and (absdphimudv < 0.02)
                         and dimuon_isos
