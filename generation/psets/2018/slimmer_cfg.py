@@ -17,11 +17,12 @@ process.load('Configuration.StandardSequences.MagneticField_AutoFromDBCurrent_cf
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_condDBv2_cff')
 # process.GlobalTag.globaltag = "101X_dataRun2_HLT_v7" # from edmProvDump
 
-if "2017" in opts.era:
-    process.GlobalTag.globaltag = "94X_mc2017_realistic_v10"
-else:
-    process.GlobalTag.globaltag = "102X_upgrade2018_realistic_v15"
-print("Era is {}, so using globaltag of {}".format(opts.era, process.GlobalTag.globaltag))
+# if "2017" in opts.era:
+#     process.GlobalTag.globaltag = "94X_mc2017_realistic_v10"
+# else:
+#     process.GlobalTag.globaltag = "102X_upgrade2018_realistic_v15"
+# print("Era is {}, so using globaltag of {}".format(opts.era, process.GlobalTag.globaltag))
+process.GlobalTag.globaltag = "102X_upgrade2018_realistic_v15"
 
 process.maxEvents = cms.untracked.PSet(
     input = cms.untracked.int32(-1)

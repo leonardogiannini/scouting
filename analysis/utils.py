@@ -284,7 +284,7 @@ def plot_overlay_bpix(ax,**kwargs):
     expand_w = kwargs.pop("expand_w",0.00)
     expand_h = kwargs.pop("expand_h",0.05)
     do_expand = (expand_h > 0) or (expand_w > 0) or (expand_h)
-    for irow,entry in gdf.query("0 < translation_z < 8 and translation_rho<14").iterrows():
+    for irow,entry in gdf.query("0 < translation_z < 8 and translation_rho<{}".format(kwargs.pop("maxrho",14))).iterrows():
         shape = entry["shape"][1:-1].T
         if do_expand:
             newshape = np.array(shape)
@@ -298,6 +298,41 @@ def plot_overlay_bpix(ax,**kwargs):
         points = np.array([np.dot(matrix,point)+translation for point in points])
         points = points[np.array([6,2,1,5,6])]
         ax.plot(points[:,0],points[:,1],color=color,**kwargs)
+    return ax
+
+def plot_overlay_pixel_rhoz(ax,**kwargs):
+    """
+    Given an axes object, overlays 2D lines for the rho-z projection of the pixel layers
+    """
+    import numpy as np
+    color = kwargs.pop("color","k")
+    lw = kwargs.pop("lw",1.0)
+    alpha = kwargs.pop("alpha",0.015)
+    binary_triplets = np.unpackbits(np.arange(8,dtype=np.uint8)[:,np.newaxis],1)[:,-3:].astype(int)
+    step_directions = binary_triplets*2-1
+    geometryfile = kwargs.pop("geometryfile","/home/users/namin/2019/scouting/repo/geometry/tracker_geometry_data2018.root")
+    gdf = get_geometry_df(geometryfile)
+    expand_l = kwargs.pop("expand_l",0.00)
+    expand_w = kwargs.pop("expand_w",0.00)
+    expand_h = kwargs.pop("expand_h",0.00)
+    do_expand = (expand_h > 0) or (expand_w > 0) or (expand_h)
+#     for irow,entry in gdf.query("0 < translation_z < 8 and translation_rho<14").iterrows():
+    for irow,entry in gdf.iterrows():
+        shape = entry["shape"][1:-1].T
+        if do_expand:
+            newshape = np.array(shape)
+            newshape[0] += expand_l
+            newshape[1] += expand_w
+            newshape[2] += expand_h
+            shape = newshape
+        translation = entry["translation"]
+        matrix = entry["matrix"].reshape(3,3)
+        points = shape * step_directions
+        points = np.array([np.dot(matrix,point)+translation for point in points])
+        points = points[np.array([6,2,1,5,6])]
+        rho = np.hypot(points[:,0],points[:,1])
+        p1,p2=points[:,2],rho
+        ax.plot(p1,p2,color=color,alpha=alpha,lw=lw,**kwargs)
     return ax
 
 def futures_widget(futures):
@@ -333,7 +368,7 @@ class TreeLikeAccessor:
     def __init__(self, pandas_obj):
         self._obj = pandas_obj
 
-    def draw(self, varexp, sel, bins=None, overflow=True, fast=False):
+    def draw(self, varexp, sel, bins=None, overflow=True, fast=True, label=None):
         try:
             from yahist import Hist1D
         except:
@@ -342,7 +377,7 @@ class TreeLikeAccessor:
         df = self._obj
 
         if fast:
-            return Hist1D(hacky_query_eval(df, varexp, sel), bins=bins)
+            return Hist1D(hacky_query_eval(df, varexp, sel), bins=bins, label=label)
 
         weights = df.eval(sel)
         mask = np.zeros(len(df), dtype=bool)
@@ -395,6 +430,8 @@ class LorentzVectorAccessor:
         return self.mu1 + self.mu2
 
 smaller_dtypes = [
+    ["dimuon_mass","float32"],
+    ["dimuon_pt","float32"],
     ["DV_chi2prob","float32"],
     ["DV_ndof","int8"],
     ["DV_redchi2","float32"],
@@ -402,6 +439,7 @@ smaller_dtypes = [
     ["Muon1_charge","int8"],
     ["Muon1_excesshits","int8"],
     ["Muon1_m","float32"],
+    ["Muon1_mass","float32"],
     ["Muon1_nExcessPixelHits","int8"],
     ["Muon1_nExpectedPixelHits","int8"],
     ["Muon1_nMatchedStations","int8"],
@@ -412,6 +450,7 @@ smaller_dtypes = [
     ["Muon2_charge","int8"],
     ["Muon2_excesshits","int8"],
     ["Muon2_m","float32"],
+    ["Muon2_mass","float32"],
     ["Muon2_nExcessPixelHits","int8"],
     ["Muon2_nExpectedPixelHits","int8"],
     ["Muon2_nMatchedStations","int8"],
@@ -423,11 +462,13 @@ smaller_dtypes = [
     ["luminosityBlock","int32"],
     ["nDV","int8"],
     ["nDV_good","int8"],
+    ["nDV_raw","int8"],
     ["nGenMuon","int8"],
     ["nGenPart","int16"],
     ["nJet","int8"],
     ["nMuon","int8"],
     ["nMuon_good","int8"],
+    ["nMuon_raw","int8"],
     ["nPV","int8"],
     ["nPVM","int8"],
     ["run","int32"],
@@ -448,6 +489,7 @@ def make_df(
     use_dask = False,
     skip_bad_files = False,
     nthreads = 6,
+    progress = True,
 ):
     """
     Returns dataframe from input ROOT files containing given branches
@@ -464,6 +506,7 @@ def make_df(
     npartitions: if not None, passed into df.repartition() before persisting
     skip_bad_files: whether to skip bad files according to failure of uproot.numentries
     nthreads: number of ThreadPoolExecutor threads when not using dask (default 6)
+    progress: show progress bar
     """
     import dask.dataframe as dd
     from dask import delayed
@@ -489,15 +532,26 @@ def make_df(
             sel = slice(None,None)
             df = pd.DataFrame()
             for k in arrs.keys():
-                if any(k.startswith(y) for y in ["n", "pass_", "BS_", "MET_","run", "lumi", "event", "L1_","dimuon", "cosphi", "absdphi","minabs", "logabs", "lxy"]):
-                    df[k] = arrs[k][sel]
-                if k.startswith("DV_"):
-                    df[k] = arrs[k][sel][:,0]
-                if k.startswith("PVM_"):
-                    df[k] = arrs[k][sel][:,0]
-                if k.startswith("Muon_"):
-                    df[k.replace("Muon_","Muon1_")] = arrs[k][sel][:,0]
-                    df[k.replace("Muon_","Muon2_")] = arrs[k][sel][:,1]
+                v = arrs[k][sel]
+                is_jagged = ("Jagged" in str(type(v)))
+                if is_jagged:
+                    if k.startswith("DV_"):
+                        df[k] = v[:,0]
+                    elif k.startswith("PVM_"):
+                        df[k] = v[:,0]
+                    elif k.startswith("Muon_"):
+                        df[k.replace("Muon_","Muon1_")] = v[:,0]
+                        df[k.replace("Muon_","Muon2_")] = v[:,1]
+                    elif k.startswith("Jet_"):
+                        if "ht" not in df.columns:
+                            df["ht"] = v.sum()
+                        v = v.pad(2).fillna(-1)
+                        df[k.replace("Jet_","Jet1_")] = v[:,0]
+                        df[k.replace("Jet_","Jet2_")] = v[:,1]
+                    else:
+                        df[k] = v
+                else:
+                    df[k] = v
             for name,dtype in smaller_dtypes:
                 if name not in df.columns: continue
                 df[name] = df[name].astype(dtype, copy=False)
@@ -518,11 +572,15 @@ def make_df(
 
         executor = concurrent.futures.ThreadPoolExecutor(nthreads)
         futures = [executor.submit(func, *chunk) for chunk in chunks]
-        ddf = pd.concat((future.result() for future in tqdm(futures)), sort=True, ignore_index=True, copy=False)
+        def wrapper(x):
+            if progress:
+                return tqdm(x)
+            return x
+        ddf = pd.concat((future.result() for future in wrapper(futures)), sort=True, ignore_index=True, copy=False)
         del executor
     else:
         delayed_func = delayed(func)
-        ddf = dd.from_delayed((delayed_func(*chunk) for chunk in chunks), meta=meta)
+        ddf = dd.from_delayed((delayed_func(*chunk) for chunk in chunks), meta=meta).reset_index(drop=True)
         if partition_size:
             ddf = ddf.repartition(partition_size=partition_size)
         if npartitions:
@@ -577,7 +635,7 @@ def ttree_to_dataframe(filename, treename="t", branches=None, progress=True, **k
     df = pd.concat(iterable, ignore_index=True, sort=True)
     return df
 
-def hacky_query_eval(df, varstr, selstr=""):
+def hacky_query_eval(df, varstr, selstr="", verbose=False):
     """
     Please don't read/use. This is dangerous and stupid, kind of like 
     integrating a function by printing out a plot, coloring the area under it in red,
@@ -617,13 +675,16 @@ def hacky_query_eval(df, varstr, selstr=""):
         convert expression string like (a > 1) to (df["a"] > 1)
         so that it can be eval'd later
         """
-        expr = Expr(s, env=env)
+        expr = Expr(s, env=env, parser="pandas")
         self = expr._visitor
         def visit_Name_hack(node, **kwargs):
             result = self.term_type(node.id, self.env, **kwargs)
             result._name = f'df["{result._name}"]'
             return result
+        def _maybe_downcast_constants_hack(left, right):
+            return left, right
         expr._visitor.visit_Name = visit_Name_hack
+        expr._visitor._maybe_downcast_constants = _maybe_downcast_constants_hack
         expr.terms = expr.parse()
         return str(expr)
     varexpr = inject_df(varstr)
@@ -631,7 +692,7 @@ def hacky_query_eval(df, varstr, selstr=""):
     if selstr:
         selexpr = str(inject_df(selstr))
         toeval += f"[{selexpr}]"
-    print(f"Evaluating string: {toeval}")
+    if verbose: print(f"Evaluating string: {toeval}")
     result = eval(toeval)
     return result
 

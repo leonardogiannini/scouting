@@ -59,6 +59,10 @@ def get_iter(ch, entrystart=None, entrystop=None):
 def delta_phi(phi1,phi2):
     return (phi1 - phi2 + math.pi) % (2*math.pi) - math.pi
 
+def delta_r(eta1,eta2,phi1,phi2):
+    return math.hypot(eta1-eta2, delta_phi(phi1,phi2))
+
+
 def get_track_reference_point(muon):
     pt = muon.pt()
     eta = muon.eta()
@@ -521,7 +525,7 @@ class Looper(object):
             make_branch(pfx+"drjet", "f")
             make_branch(pfx+"passid", "b")
             make_branch(pfx+"passiso", "b")
-            make_branch(pfx+"genMatch_dr", "f")
+            make_branch(pfx+"genMatch_dr", "f") # genMatch branches are for matched gen muons
             make_branch(pfx+"genMatch_pt", "f")
             make_branch(pfx+"genMatch_eta", "f")
             make_branch(pfx+"genMatch_phi", "f")
@@ -532,10 +536,11 @@ class Looper(object):
             make_branch(pfx+"genMatch_lxy", "f")
             make_branch(pfx+"genMatch_status", "i")
             make_branch(pfx+"genMatch_pdgId", "i")
-            make_branch(pfx+"genMatch_motherId", "i")
+            make_branch(pfx+"genMatch_motherId", "i") # genMatch_mother for mothers of matched genmuons
             make_branch(pfx+"genMatch_mothervx", "f")
             make_branch(pfx+"genMatch_mothervy", "f")
             make_branch(pfx+"genMatch_mothervz", "f")
+            make_branch(pfx+"genMatch_motherct", "f")
             make_branch(pfx+"trk_refx", "f")
             make_branch(pfx+"trk_refy", "f")
             make_branch(pfx+"trk_refz", "f")
@@ -933,11 +938,15 @@ class Looper(object):
                         branches[pfx+"genMatch_mothervx"][0] = mother.vx()
                         branches[pfx+"genMatch_mothervy"][0] = mother.vy()
                         branches[pfx+"genMatch_mothervz"][0] = mother.vz()
+                        # https://arxiv.org/pdf/1710.08949.pdf eq 1
+                        ct = (matched_genmu.vx()*mother.px()+matched_genmu.vy()*mother.py())*mother.mass()/mother.pt()**2.
+                        branches[pfx+"genMatch_motherct"][0] = ct
                     else:
                         branches[pfx+"genMatch_motherId"][0] = 0
                         branches[pfx+"genMatch_mothervx"][0] = 0.
                         branches[pfx+"genMatch_mothervy"][0] = 0.
                         branches[pfx+"genMatch_mothervz"][0] = 0.
+                        branches[pfx+"genMatch_motherct"][0] = 0.
 
 
             ########################################

@@ -1,0 +1,22 @@
+--- TBLayer.cc	2020-06-04 17:17:02.288853214 -0700
++++ TBLayer.fix	2020-06-04 17:17:37.066849627 -0700
+@@ -57,13 +57,17 @@
+   HelixBarrelCylinderCrossing innerCrossing( startPos, startDir, rho,
+ 					     propDir,*theInnerCylinder,
+ 					     HelixBarrelCylinderCrossing::onlyPos);
+-  if (!innerCrossing.hasSolution()) return SubLayerCrossings(); 
+ 
+   HelixBarrelCylinderCrossing outerCrossing( startPos, startDir, rho,
+ 					     propDir,*theOuterCylinder,
+ 					     HelixBarrelCylinderCrossing::onlyPos);
+-  if (!outerCrossing.hasSolution()) return SubLayerCrossings();
+ 
++  if (!innerCrossing.hasSolution() && !outerCrossing.hasSolution()) return SubLayerCrossings();
++  if (!innerCrossing.hasSolution() && outerCrossing.hasSolution()) {
++      innerCrossing = outerCrossing;
++  } else if (!outerCrossing.hasSolution() && innerCrossing.hasSolution()) {
++      outerCrossing = innerCrossing;
++  }
+ 
+   GlobalPoint gInnerPoint( innerCrossing.position());
+   GlobalPoint gOuterPoint( outerCrossing.position());

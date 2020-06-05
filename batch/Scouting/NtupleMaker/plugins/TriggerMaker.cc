@@ -33,7 +33,7 @@ TriggerMaker::TriggerMaker(const edm::ParameterSet& iConfig) :
     produces<std::vector<float> >("trigObjseta").setBranchAlias("trigObjs_eta");
     produces<std::vector<float> >("trigObjsphi").setBranchAlias("trigObjs_phi");
     produces<std::vector<float> >("trigObjsmass").setBranchAlias("trigObjs_mass");
-    produces<std::vector<bool> >("trigObjspassLast").setBranchAlias("trigObjs_passLast");
+    produces<std::vector<int> >("trigObjspassLast").setBranchAlias("trigObjs_passLast");
   }
 
   produces<std::vector<std::string> >("l1name").setBranchAlias("l1_name");
@@ -94,7 +94,7 @@ void TriggerMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
   unique_ptr<std::vector<float > > trigObjseta(new std::vector<float>);
   unique_ptr<std::vector<float > > trigObjsphi(new std::vector<float>);
   unique_ptr<std::vector<float > > trigObjsmass(new std::vector<float>);
-  unique_ptr<std::vector<bool > > trigObjspassLast(new std::vector<bool>);
+  unique_ptr<std::vector<int > > trigObjspassLast(new std::vector<int>);
   unique_ptr<std::vector<std::string> > trigObjsfilters(new std::vector<std::string>);
 
   if (doTriggerObjects_) {

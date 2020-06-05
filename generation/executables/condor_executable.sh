@@ -230,6 +230,7 @@ setup_cmssw CMSSW_10_2_3 slc6_amd64_gcc700
 cmsRun $gensimcfg
 setup_cmssw CMSSW_10_2_5 slc6_amd64_gcc700 
 cmsRun $rawsimcfg
+cmsRun $aodsimcfg
 setup_slimmer
 cmsRun $slimmercfg
 CMSRUN_STATUS=$?
@@ -261,6 +262,10 @@ chirp ChirpMetisStatus "before_copy"
 
 COPY_SRC="file://`pwd`/${OUTPUTNAME}.root"
 COPY_DEST="gsiftp://gftp.t2.ucsd.edu${OUTPUTDIR}/${OUTPUTNAME}_${IFILE}.root"
+stageout $COPY_SRC $COPY_DEST
+
+COPY_SRC="file://`pwd`/output_aodsim.root"
+COPY_DEST="gsiftp://gftp.t2.ucsd.edu${OUTPUTDIR}/aodsim/output_${IFILE}.root"
 stageout $COPY_SRC $COPY_DEST
 
 echo -e "\n--- end copying output ---\n" #                      <----- section division

@@ -75,7 +75,7 @@ if opts.data:
 else:
     if "2017" in opts.era:
         # gtag = "94X_mc2017_realistic_v10"
-        gtag = "94X_mc2017_realistic_v11" # FIXME how to automatically determine
+        gtag = "94X_mc2017_realistic_v11" # FIXME how to automatically determine (without using hltInfo <edmfile>)
     else:
         gtag = "102X_upgrade2018_realistic_v15"
 print("Using {}".format(gtag))

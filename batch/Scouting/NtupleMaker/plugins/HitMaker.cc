@@ -30,6 +30,7 @@ HitMaker::HitMaker(const edm::ParameterSet& iConfig)
     produces<vector<vector<float> > >("y").setBranchAlias("Muon_hit_y");
     produces<vector<vector<float> > >("z").setBranchAlias("Muon_hit_z");
     produces<vector<int> >("nexpectedhits").setBranchAlias("Muon_nExpectedPixelHits");
+    produces<vector<int> >("ncompatible").setBranchAlias("Muon_nCompatiblePixelLayers");
     produces<vector<int> >("nexpectedhitsmultiple").setBranchAlias("Muon_nExpectedPixelHitsMultiple");
 }
 
@@ -65,7 +66,7 @@ void HitMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
 
     if (debug) {
         std::cout << std::endl;
-        std::cout << "------- Event " << iEvent.id().event() << " -------" << std::endl;
+        std::cout << "------- Run " << iEvent.id().run() << " Lumi " << iEvent.luminosityBlock() << " Event " << iEvent.id().event() << " -------" << std::endl;
     }
 
     // nlohmann::json j;
@@ -78,6 +79,7 @@ void HitMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
     unique_ptr<vector<vector<float> > > v_hity(new vector<vector<float> >);
     unique_ptr<vector<vector<float> > > v_hitz(new vector<vector<float> >);
     unique_ptr<vector<int> > v_nexpectedhits(new vector<int>);
+    unique_ptr<vector<int> > v_ncompatible(new vector<int>);
     unique_ptr<vector<int> > v_nexpectedhitsmultiple(new vector<int>);
 
     for (auto const& muon : *muonHandle) {
@@ -241,9 +243,15 @@ void HitMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
         int nexpectedhitsmultiple = 0;
         int nexpectedhitsmultipleraw = 0;
         auto tsos = startingStateP;
+        int ncompatible = 0;
         for (auto const& layer : layers_pixel) {
+            bool compatible = layer->compatible(tsos, prop, estimator).first;
+            if (debug) std::cout << "compatible=" << compatible << std::endl;
+            ncompatible += compatible;
             // auto tsos = startingStateP;
+            // /cvmfs/cms.cern.ch/slc6_amd64_gcc700/cms/cmssw/CMSSW_10_2_5/src/TrackingTools/DetLayers/src/BarrelDetLayer.cc
             auto const& detWithState = layer->compatibleDets(tsos, prop, estimator);
+            if (debug) std::cout << "detWithState.size()=" << detWithState.size() << std::endl;
             if (!detWithState.size()) continue;
             tsos = detWithState.front().second;
             DetId did = detWithState.front().first->geographicalId();
@@ -264,6 +272,7 @@ void HitMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
             for (auto ds : detWithState) {
                 auto did2 = ds.first->geographicalId();
                 auto md = measurementTracker_->idToDet(did2, *measurementTrackerEvent);
+                if (debug) std::cout << "   subhit active=" << md.isActive() << " valid=" << md.isValid() << std::endl;
                 nexpectedhitsmultiple += md.isActive()*md.isValid();
                 nexpectedhitsmultipleraw += 1;
             }
@@ -284,6 +293,7 @@ void HitMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
         v_hity->push_back(hity);
         v_hitz->push_back(hitz);
         v_nexpectedhits->push_back(nexpectedhits);
+        v_ncompatible->push_back(ncompatible);
         v_nexpectedhitsmultiple->push_back(nexpectedhitsmultiple);
 
         if (debug) {
@@ -310,6 +320,7 @@ void HitMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
     iEvent.put(std::move(v_hity), "y");
     iEvent.put(std::move(v_hitz), "z");
     iEvent.put(std::move(v_nexpectedhits), "nexpectedhits");
+    iEvent.put(std::move(v_ncompatible), "ncompatible");
     iEvent.put(std::move(v_nexpectedhitsmultiple), "nexpectedhitsmultiple");
 }
 
