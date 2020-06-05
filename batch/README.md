@@ -7,8 +7,8 @@ RAW ntuples are generated/slimmed first, then these are made into babies.
 #### Data
 
 RAW scouting data is already available, but it stores huge FED and track info, so we first skim it with CRAB to events with
->=2 Scouting Muons and >=1 DV, and we add some extra information, while preserving the EDM structure. So in principle, one can run the same
-CMSSW code on these new ntuples to add/compute other stuff.
+at least 2 Scouting Muons and at least 1 Scouting Vertex, and we add some extra information, while preserving the EDM structure.
+So in principle, one can run the same CMSSW code on these new ntuples to add/compute other stuff.
 * Do `. install_cmssw.sh`. This sets up a CMSSW environment with some EDFilters and some EDAnalyzers. (Note that `Scouting/NtupleMaker/test/producer.py` is the relevant PSet for slim/skimming)
 
 ##### Manual way
