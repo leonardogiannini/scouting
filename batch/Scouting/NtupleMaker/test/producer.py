@@ -160,7 +160,6 @@ HLTInfo = [
            ]
 
 do_trigger_objects = not opts.data
-print(do_trigger_objects)
 
 process.triggerMaker = cms.EDProducer("TriggerMaker",
         triggerAlias = cms.vstring(zip(*HLTInfo)[0]),

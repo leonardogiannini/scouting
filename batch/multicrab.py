@@ -1,10 +1,8 @@
 import os
 import sys
 import multiprocessing
-from WMCore.Configuration import Configuration
 from CRABAPI.RawCommand import crabCommand
-from CRABClient.UserUtilities import setConsoleLogLevel, getUsernameFromSiteDB, config
-from CRABClient.ClientUtilities import LOGLEVEL_MUTE
+from CRABClient.UserUtilities import setConsoleLogLevel, config
 
 import glob
 from pprint import pprint
@@ -13,7 +11,7 @@ from metis.CrabManager import CrabManager
 def get_proxy_file():
     return "/tmp/x509up_u{0}".format(os.getuid())
 
-def get_config_for_era(era, version, do_unblind=True):
+def get_config_for_era(era, version, do_unblind=False):
     # sorry, name might be stupid. `do_unblind` means we process
     # the unblinded subset only.
 
@@ -31,7 +29,7 @@ def get_config_for_era(era, version, do_unblind=True):
     cfg.General.transferLogs = True
 
     cfg.JobType.pluginName = 'Analysis'
-    cfg.JobType.psetName = 'Scouting/NtupleMaker/test/dataproducer.py'
+    cfg.JobType.psetName = 'Scouting/NtupleMaker/test/producer.py'
 
     cfg.JobType.pyCfgParams=["era={}".format(era),"data=True",]
 
@@ -50,42 +48,41 @@ def get_config_for_era(era, version, do_unblind=True):
     return cfg
 
 def do_submit(q, config, proxy):
-    if not proxy:
-        out = crabCommand('submit', config=config)
-    else:
-        out = crabCommand('submit', config=config, proxy=proxy)
+    extra = dict(config=config)
+    if proxy: extra["proxy"] = proxy
+    out = crabCommand('submit', **extra)
     q.put(out)
 
 if __name__ == "__main__":
 
-    # version = "v11"
-    # do_unblind = True
-    # proxy = get_proxy_file()
-    # for era in [
-    #         "2017C",
-    #         "2017D",
-    #         "2017E",
-    #         "2017F",
-    #         "2018A",
-    #         "2018B",
-    #         "2018C",
-    #         "2018D",
-    #         ]:
-    #     cfg = get_config_for_era(era=era, version=version, do_unblind=do_unblind)
-    #     taskdir = "{}/crab_{}/".format(cfg.General.workArea, cfg.General.requestName)
-    #     if os.path.exists(taskdir):
-    #         print("Task dir {} already exists.".format(taskdir))
-    #         continue
-    #     # need to spawn a new process or else crab complains that a config has already been cached :(
-    #     mpq = multiprocessing.Queue()
-    #     mpp = multiprocessing.Process(target=do_submit, args=(mpq, cfg, proxy))
-    #     mpp.start()
-    #     mpp.join()
-    #     out = mpq.get()
-    #     print(out)
+    version = "v12"
+    do_unblind = False
+    proxy = get_proxy_file()
+    for era in [
+            "2017C",
+            "2017D",
+            "2017E",
+            "2017F",
+            "2018A",
+            "2018B",
+            "2018C",
+            "2018D",
+            ]:
+        cfg = get_config_for_era(era=era, version=version, do_unblind=do_unblind)
+        taskdir = "{}/crab_{}/".format(cfg.General.workArea, cfg.General.requestName)
+        if os.path.exists(taskdir):
+            print("Task dir {} already exists.".format(taskdir))
+            continue
+        # need to spawn a new process or else crab complains that a config has already been cached :(
+        mpq = multiprocessing.Queue()
+        mpp = multiprocessing.Process(target=do_submit, args=(mpq, cfg, proxy))
+        mpp.start()
+        mpp.join()
+        out = mpq.get()
+        print(out)
 
     statuses = {}
-    taskdirs = glob.glob("crab/crab_skim_201*_v11_unblind/")
+    taskdirs = glob.glob("crab/crab_skim_201*_{}/".format(version))
     for taskdir in taskdirs:
         print("\n\n----- {} -----".format(taskdir))
         cm = CrabManager(request_name=taskdir)
@@ -118,6 +115,7 @@ width: 40%;
     for taskdir,info in statuses.items():
         job_breakdown = info["job_breakdown"]
         totjobs = sum(job_breakdown.values())
+        if totjobs == 0: continue
         ndone = (job_breakdown["finished"])
         nrunning = (job_breakdown["running"]+job_breakdown["transferring"]+job_breakdown["transferred"])
         nfailed = (job_breakdown["failed"])
@@ -151,11 +149,13 @@ width: 40%;
                 )
         src += div
 
-    print(src)
-
     src += "</body></html>"
 
-    with open("/home/users/namin/public_html/dump/test.html","w") as fh:
+    user = os.getenv("USER").strip()
+    outdir = "/home/users/{}/public_html/dump/".format(user)
+    if not os.path.exists(outdir):
+        os.system("mkdir -p {}".format(outdir))
+    with open("{}/test.html".format(outdir),"w") as fh:
         fh.write(src)
 
 
