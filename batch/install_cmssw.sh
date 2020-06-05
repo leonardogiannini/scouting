@@ -7,8 +7,10 @@ cd $_
 cmsenv
 cd -
 
+# Patch track propagation code to fix issue when starting point is between
+# inner and outer facets of a given pixel layer.
 git cms-addpkg RecoTracker/TkDetLayers
-patch $CMSSW_BASE/src/RecoTracker/TkDetLayers/src/TBLayer.cc < $thisdir/patches/RecoTracker_TkDetLayers_src_TBLayer.patch
+patch -N -r - $CMSSW_BASE/src/RecoTracker/TkDetLayers/src/TBLayer.cc < $thisdir/patches/RecoTracker_TkDetLayers_src_TBLayer.patch
 
 cd $release/src
 ln -s ../../Scouting/
