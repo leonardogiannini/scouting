@@ -16,14 +16,15 @@ inputs = []
 def convert_fname(fname):
     if fname.startswith("/store") or fname.startswith("root://"): return fname
     return "file:" + fname.replace("file:","",1)
-if not opts.inputs:
-    if opts.data:
-        inputs = ['file:/hadoop/cms/store/user/namin/nanoaod/ScoutingCaloMuon__Run2018C-v1/6A94C331-F38D-E811-B4D7-FA163E146D61.root']
-        opts.era = "2018C"
-    else:
-        inputs = ['file:/hadoop/cms/store/user/namin/ProjectMetis/BToPhi_params_mphi2_ctau20mm_RAWSIM_v0/rawsim/output_215.root']
-        opts.era = "2017"
-else:
+# # BE CAREFUL WITH NEXT FEW LINES WHEN SUBMITTING TO CONDOR
+# if not opts.inputs:
+#     if opts.data:
+#         inputs = ['file:/hadoop/cms/store/user/namin/nanoaod/ScoutingCaloMuon__Run2018C-v1/6A94C331-F38D-E811-B4D7-FA163E146D61.root']
+#         opts.era = "2018C"
+#     else:
+#         inputs = ['file:/hadoop/cms/store/user/namin/ProjectMetis/BToPhi_params_mphi2_ctau20mm_RAWSIM_v0/rawsim/output_215.root']
+#         opts.era = "2017"
+if opts.inputs:
     inputs = map(convert_fname,opts.inputs.split(","))
 
 print("""
