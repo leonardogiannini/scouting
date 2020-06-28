@@ -432,6 +432,7 @@ class Looper(object):
         make_branch("pass_materialveto", "b")
         make_branch("pass_dxyscaled", "b")
         make_branch("pass_dxysig", "b")
+        make_branch("pass_all", "b")
         # make_branch("pass_fiducialgen_norho", "b")
         make_branch("pass_genmatch", "b")
 
@@ -1047,6 +1048,8 @@ class Looper(object):
                 branches["pass_baseline_extra"][0] = pass_baseline and pass_extra
                 branches["pass_baseline_extra_iso"][0] = pass_baseline_iso and pass_extra
                 branches["pass_baseline_extra_isohalf"][0] = pass_baseline_isohalf and pass_extra
+
+                branches["pass_all"][0] = pass_baseline_iso and pass_extra and pass_dxyscaled and pass_dxysig
 
             # Fill some branches for subleading DV and associated muons, if they exist
             if len(selected_dvs) >= 2 and len(selected_muons) >= 4:
