@@ -1,0 +1,56 @@
+
+Mass = 4.50 GeV  FONLL central Filter eff = 20.69 +/- 0.38 % 
+Mass = 4.50 GeV  FONLL down    Filter eff = 22.16 +/- 0.39 % 
+Mass = 4.50 GeV  FONLL up      Filter eff = 20.04 +/- 0.37 % 
+
+Mass = 0.30 GeV  FONLL central Filter eff = 11.68 +/- 0.25 % 
+Mass = 0.30 GeV  FONLL down    Filter eff = 12.79 +/- 0.25 % 
+Mass = 0.30 GeV  FONLL up      Filter eff = 11.14 +/- 0.24 % 
+
+Mass = 0.40 GeV  FONLL central Filter eff = 10.27 +/- 0.24 % 
+Mass = 0.40 GeV  FONLL down    Filter eff = 11.24 +/- 0.25 % 
+Mass = 0.40 GeV  FONLL up      Filter eff = 9.79 +/- 0.24 % 
+
+Mass = 0.50 GeV  FONLL central Filter eff = 8.94 +/- 0.22 % 
+Mass = 0.50 GeV  FONLL down    Filter eff = 9.79 +/- 0.23 % 
+Mass = 0.50 GeV  FONLL up      Filter eff = 8.54 +/- 0.21 % 
+
+Mass = 0.60 GeV  FONLL central Filter eff = 8.41 +/- 0.21 % 
+Mass = 0.60 GeV  FONLL down    Filter eff = 9.21 +/- 0.22 % 
+Mass = 0.60 GeV  FONLL up      Filter eff = 8.01 +/- 0.21 % 
+
+Mass = 0.75 GeV  FONLL central Filter eff = 8.33 +/- 0.21 % 
+Mass = 0.75 GeV  FONLL down    Filter eff = 9.12 +/- 0.22 % 
+Mass = 0.75 GeV  FONLL up      Filter eff = 7.95 +/- 0.21 % 
+
+Mass = 1.00 GeV  FONLL central Filter eff = 8.42 +/- 0.21 % 
+Mass = 1.00 GeV  FONLL down    Filter eff = 9.22 +/- 0.22 % 
+Mass = 1.00 GeV  FONLL up      Filter eff = 8.02 +/- 0.21 % 
+
+Mass = 1.25 GeV  FONLL central Filter eff = 8.73 +/- 0.23 % 
+Mass = 1.25 GeV  FONLL down    Filter eff = 9.54 +/- 0.24 % 
+Mass = 1.25 GeV  FONLL up      Filter eff = 8.33 +/- 0.22 % 
+
+Mass = 1.50 GeV  FONLL central Filter eff = 8.86 +/- 0.22 % 
+Mass = 1.50 GeV  FONLL down    Filter eff = 9.69 +/- 0.23 % 
+Mass = 1.50 GeV  FONLL up      Filter eff = 8.45 +/- 0.21 % 
+
+Mass = 2.00 GeV  FONLL central Filter eff = 9.31 +/- 0.22 % 
+Mass = 2.00 GeV  FONLL down    Filter eff = 10.18 +/- 0.23 % 
+Mass = 2.00 GeV  FONLL up      Filter eff = 8.88 +/- 0.22 % 
+
+Mass = 2.50 GeV  FONLL central Filter eff = 10.03 +/- 0.23 % 
+Mass = 2.50 GeV  FONLL down    Filter eff = 10.99 +/- 0.24 % 
+Mass = 2.50 GeV  FONLL up      Filter eff = 9.56 +/- 0.22 % 
+
+Mass = 3.00 GeV  FONLL central Filter eff = 11.84 +/- 0.25 % 
+Mass = 3.00 GeV  FONLL down    Filter eff = 12.92 +/- 0.26 % 
+Mass = 3.00 GeV  FONLL up      Filter eff = 11.32 +/- 0.24 % 
+
+Mass = 3.50 GeV  FONLL central Filter eff = 13.40 +/- 0.26 % 
+Mass = 3.50 GeV  FONLL down    Filter eff = 14.59 +/- 0.27 % 
+Mass = 3.50 GeV  FONLL up      Filter eff = 12.83 +/- 0.26 % 
+
+Mass = 4.00 GeV  FONLL central Filter eff = 16.40 +/- 0.28 % 
+Mass = 4.00 GeV  FONLL down    Filter eff = 17.78 +/- 0.29 % 
+Mass = 4.00 GeV  FONLL up      Filter eff = 15.77 +/- 0.28 % 
