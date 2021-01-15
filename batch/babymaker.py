@@ -13,12 +13,15 @@ import time
 import argparse
 import os
 import pickle
+import ast
+import uuid
 
 import socket
 import gzip
 
 
 MUON_MASS = 0.10566
+randid = str(uuid.uuid4()).split("-")[0]
 
 fast = False
 if fast:
@@ -62,6 +65,25 @@ def delta_phi(phi1,phi2):
 def delta_r(eta1,eta2,phi1,phi2):
     return math.hypot(eta1-eta2, delta_phi(phi1,phi2))
 
+
+def get_filter_eff_info(origch):
+    fnames = [f.GetTitle().replace("/output_","/aodsim/output_") for f in origch.GetListOfFiles()]
+    ch = r.TChain("LuminosityBlocks")
+    for fname in fnames:
+        ch.Add(fname)
+    ch.SetBranchStatus("*",0)
+    ch.SetBranchStatus("*genFilterEfficiency*",1)
+    npassed = 0
+    ntotal = 0
+    nfiles = 0
+    for event in ch:
+        gfi = event.GenFilterInfo_genFilterEfficiencyProducer__SIM.product()
+        npassed += int(gfi.numEventsPassed())
+        ntotal += int(gfi.numEventsTotal())
+        nfiles += 1
+        if (nfiles % 5 == 0) or (nfiles == len(fnames)):
+            print(">>> Checked {} files, npassed={}, ntotal={}".format(nfiles, npassed, ntotal))
+    return dict(npassed=npassed, ntotal=ntotal, nfiles=nfiles)
 
 def get_track_reference_point(muon):
     pt = muon.pt()
@@ -222,6 +244,59 @@ def write_metadata_to_tfile(tfile, metadata):
         obj = r.TString(str(v))
         tfile.WriteObject(obj, k)
 
+def get_btophi_gen_info(genparts):
+    d_daughters = {}
+    for genpart in genparts:
+        pdgid = genpart.pdgId()
+        if abs(pdgid) not in [13,6000211]: continue
+        motheridx = genpart.motherRef().index()
+        mother = genparts[motheridx]
+        motherid = mother.pdgId()
+        if ((motherid == 6000211)) and (abs(pdgid)==13): 
+            if motheridx not in d_daughters:
+                d_daughters[motheridx] = {"daughters":[], "mother":None}
+            d_daughters[motheridx]["daughters"].append(genpart)
+            bmesonidx = mother.motherRef().index()
+            bmeson = genparts[bmesonidx]
+            d_daughters[motheridx]["bmeson"] = bmeson
+    nphi = len(d_daughters.keys())
+    out = {}
+    out["nphi"] = nphi
+    if nphi == 1:
+        d = d_daughters.values()[0]
+        mu1 = d["daughters"][0]
+        mu2 = d["daughters"][1]
+        if mu2.pt() > mu1.pt(): mu1, mu2 = mu2, mu1
+        out["mu1pt"] = round(mu1.pt(),3)
+        out["mu2pt"] = round(mu2.pt(),3)
+        out["mu1eta"] = round(mu1.eta(),3)
+        out["mu2eta"] = round(mu2.eta(),3)
+        out["phimass"] = round((mu1.p4()+mu2.p4()).mass(),3)
+        out["phipt"] = round((mu1.p4()+mu2.p4()).pt(),3)
+        out["phieta"] = round((mu1.p4()+mu2.p4()).eta(),3)
+        out["bmesonmass"] = round(d["bmeson"].p4().mass(),3)
+        out["bmesonid"] = d["bmeson"].pdgId()
+        out["bmesonpt"] = round(d["bmeson"].pt(),3)
+        out["bmesoneta"] = round(d["bmeson"].eta(),3)
+    return out
+
+def get_hzdzd_gen_info(genparts):
+    d_daughters = {}
+    for genpart in genparts:
+        pdgid = genpart.pdgId()
+        if abs(pdgid) not in [13,23]: continue
+        motheridx = genpart.motherRef().index()
+        mother = genparts[motheridx]
+        motherid = mother.pdgId()
+        if ((motherid == 23)) and (abs(pdgid)==13): 
+            if motheridx not in d_daughters:
+                d_daughters[motheridx] = {"daughters":[], "mother":None}
+            d_daughters[motheridx]["daughters"].append(genpart)
+    nzd = len(d_daughters.keys())
+    out = {}
+    out["nzd"] = nzd
+    return out
+
 class Looper(object):
 
     def __init__(self,fnames=[], output="output.root", nevents=-1, expected=-1, treename="Events", year=2018):
@@ -274,6 +349,16 @@ class Looper(object):
             ch.Add(fname)
 
         print(">>> Done making TChain")
+
+
+        self.is_hzdzd = any(x in self.fnames[0] for x in ["HToZd", "ZdZd"])
+        self.is_btophi = any(x in self.fnames[0] for x in ["BToPhi", "BPhi"])
+
+        # self.eff_info = dict()
+        # if self.is_btophi:
+        #     print(">>> Started calculating filter efficiency")
+        #     self.eff_info = get_filter_eff_info(ch)
+        #     print(">>> Done calculating filter efficiency:", self.eff_info)
 
         branchnames = [b.GetName() for b in ch.GetListOfBranches()]
         self.has_gen_info = any("genParticles" in name for name in branchnames)
@@ -459,10 +544,31 @@ class Looper(object):
         make_branch("pass_baseline_extra_iso", "b")
         make_branch("pass_baseline_extra_isohalf", "b")
 
+        # event-level for subleading pair
+        make_branch("sublead_pass_genmatch", "b")
+        make_branch("sublead_pass_excesshits", "b")
+        make_branch("sublead_pass_materialveto", "b")
+        make_branch("sublead_pass_dxyscaled", "b")
+        make_branch("sublead_pass_dxysig", "b")
+        make_branch("sublead_pass_all", "b")
         make_branch("sublead_dimuon_isos", "b")
+        make_branch("sublead_dimuon_pt", "f")
+        make_branch("sublead_dimuon_eta", "f")
+        make_branch("sublead_dimuon_phi", "f")
         make_branch("sublead_dimuon_mass", "f")
+        make_branch("sublead_mass", "f")
+        make_branch("sublead_absdphimumu", "f")
+        make_branch("sublead_absdphimudv", "f")
+        make_branch("sublead_minabsdxy", "f")
         make_branch("sublead_logabsetaphi", "f")
         make_branch("sublead_lxy", "f")
+        make_branch("sublead_pass_baseline", "b")
+        make_branch("sublead_pass_baseline_iso", "b")
+        make_branch("sublead_pass_baseline_extra", "b")
+        make_branch("sublead_pass_baseline_extra_iso", "b")
+
+        # four muon branches
+        make_branch("FourMuon_mass", "f")
 
         make_branch("MET_pt", "f")
         make_branch("MET_phi", "f")
@@ -538,6 +644,7 @@ class Looper(object):
             make_branch(pfx+"genMatch_status", "i")
             make_branch(pfx+"genMatch_pdgId", "i")
             make_branch(pfx+"genMatch_motherId", "i") # genMatch_mother for mothers of matched genmuons
+            make_branch(pfx+"genMatch_grandmotherId", "i")
             make_branch(pfx+"genMatch_mothervx", "f")
             make_branch(pfx+"genMatch_mothervy", "f")
             make_branch(pfx+"genMatch_mothervz", "f")
@@ -555,6 +662,25 @@ class Looper(object):
             make_branch(pfx+"trk_dsz", "f")
             make_branch(pfx+"trk_dszError", "f")
 
+
+        if self.is_btophi:
+            make_branch("BToPhi_nphi", "i")
+            make_branch("BToPhi_mu1pt", "f")
+            make_branch("BToPhi_mu2pt", "f")
+            make_branch("BToPhi_mu1eta", "f")
+            make_branch("BToPhi_mu2eta", "f")
+            make_branch("BToPhi_phimass", "f")
+            make_branch("BToPhi_phipt", "f")
+            make_branch("BToPhi_phieta", "f")
+            make_branch("BToPhi_bmesonmass", "f")
+            make_branch("BToPhi_bmesonid", "i")
+            make_branch("BToPhi_bmesonpt", "f")
+            make_branch("BToPhi_bmesoneta", "f")
+
+        if self.is_hzdzd:
+            make_branch("HZdZd_nzd", "i")
+
+
         make_branch("GenOther_pt", "vf")
         make_branch("GenOther_eta", "vf")
         make_branch("GenOther_phi", "vf")
@@ -566,6 +692,7 @@ class Looper(object):
         make_branch("GenOther_status", "vi")
         make_branch("GenOther_pdgId", "vi")
         make_branch("GenOther_motherId", "vi")
+        make_branch("GenOther_grandmotherId", "vi")
 
         make_branch("nGenMuon", "i")
         make_branch("GenMuon_pt", "vf")
@@ -579,6 +706,7 @@ class Looper(object):
         make_branch("GenMuon_status", "vi")
         make_branch("GenMuon_pdgId", "vi")
         make_branch("GenMuon_motherId", "vi")
+        make_branch("GenMuon_grandmotherId", "vi")
 
         make_branch("BS_x", "f")
         make_branch("BS_y", "f")
@@ -605,6 +733,12 @@ class Looper(object):
 
         l1names = []
 
+        if self.is_btophi:
+            fh_btophi = open(".temp_btophi_{}.dat".format(randid), "w")
+
+        if self.is_hzdzd:
+            fh_hzdzd = open(".temp_hzdzd_{}.dat".format(randid), "w")
+
         ievt = 0
         nevents_in = ch.GetEntries()
         print(">>> Started slimming/skimming tree with {} events".format(nevents_in))
@@ -623,6 +757,19 @@ class Looper(object):
             if (self.nevents > 0) and (ievt > self.nevents): break
 
             ievt += 1
+            if self.has_gen_info:
+                if self.is_btophi:
+                    genparts = list(evt.recoGenParticles_genParticles__HLT.product()) # rawsim
+                    # compute some information here before any selections for use later and in a
+                    # separate ttree
+                    d_btophi_info = get_btophi_gen_info(genparts)
+                    fh_btophi.write(str(d_btophi_info) + "\n")
+                if self.is_hzdzd:
+                    genparts = list(evt.recoGenParticles_genParticles__HLT.product()) # rawsim
+                    # compute some information here before any selections for use later and in a
+                    # separate ttree
+                    d_hzdzd_info = get_hzdzd_gen_info(genparts)
+                    fh_hzdzd.write(str(d_hzdzd_info) + "\n")
 
             dvs = evt.ScoutingVertexs_hltScoutingMuonPackerCalo_displacedVtx_HLT.product()
             muons = evt.ScoutingMuons_hltScoutingMuonPackerCalo__HLT.product()
@@ -732,7 +879,8 @@ class Looper(object):
                 bsy = float(evt.float_beamSpotMaker_y_SLIM.product()[0])
                 bsz = float(evt.float_beamSpotMaker_z_SLIM.product()[0])
             else:
-                bsx,bsy,bsz = self.get_bs(run=run,lumi=lumi,year=self.year)
+                # bsx,bsy,bsz = self.get_bs(run=run,lumi=lumi,year=self.year)
+                bsx,bsy,bsz = 0., 0., 0.
             branches["BS_x"][0] = bsx
             branches["BS_y"][0] = bsy
             branches["BS_z"][0] = bsz
@@ -805,6 +953,7 @@ class Looper(object):
                     branches["GenOther_status"].push_back(genpart.status())
                     branches["GenOther_pdgId"].push_back(pdgid)
                     branches["GenOther_motherId"].push_back(motherid)
+                    branches["GenOther_grandmotherId"].push_back(0)
                 # For the useful muons, store them in GenMuon branches to avoid reading a lot of extra junk
                 if (motherid in [23, 6000211, 999999, 1999999, 3000022]) and (abs(pdgid)==13): 
                     branches["GenMuon_pt"].push_back(genpart.pt())
@@ -818,6 +967,9 @@ class Looper(object):
                     branches["GenMuon_status"].push_back(genpart.status())
                     branches["GenMuon_pdgId"].push_back(pdgid)
                     branches["GenMuon_motherId"].push_back(motherid)
+                    grandmother = genparts[mother.motherRef().index()]
+                    grandmotherid = grandmother.pdgId()
+                    branches["GenMuon_grandmotherId"].push_back(grandmotherid)
                     # if (genpart.pt() > 3.) and (abs(genpart.eta()) < 2.4):
                     #     nFiducialMuon_norho += 1
                     #     if (math.hypot(genpart.vx(),genpart.vy())<11.):
@@ -825,8 +977,29 @@ class Looper(object):
                     nGenMuon += 1
                     genmuons.append(genpart)
             branches["nGenMuon"][0] = nGenMuon
+            # half of nGenMuon should be number of phis
             # branches["pass_fiducialgen"][0] = (nFiducialMuon >= 2) or (not self.is_mc)
             # branches["pass_fiducialgen_norho"][0] = (nFiducialMuon_norho >= 2) or (not self.is_mc)
+
+            if self.has_gen_info:
+                if self.is_btophi:
+                    d = d_btophi_info
+                    branches["BToPhi_nphi"][0] = d["nphi"]
+                    if d["nphi"] == 1:
+                        branches["BToPhi_mu1pt"][0] = d["mu1pt"]
+                        branches["BToPhi_mu2pt"][0] = d["mu2pt"]
+                        branches["BToPhi_mu1eta"][0] = d["mu1eta"]
+                        branches["BToPhi_mu2eta"][0] = d["mu2eta"]
+                        branches["BToPhi_phimass"][0] = d["phimass"]
+                        branches["BToPhi_phipt"][0] = d["phipt"]
+                        branches["BToPhi_phieta"][0] = d["phieta"]
+                        branches["BToPhi_bmesonmass"][0] = d["bmesonmass"]
+                        branches["BToPhi_bmesonid"][0] = d["bmesonid"]
+                        branches["BToPhi_bmesonpt"][0] = d["bmesonpt"]
+                        branches["BToPhi_bmesoneta"][0] = d["bmesoneta"]
+                if self.is_hzdzd:
+                    d = d_hzdzd_info
+                    branches["HZdZd_nzd"][0] = d["nzd"]
 
 
             ########################################
@@ -935,14 +1108,23 @@ class Looper(object):
                             found = True
                             break
                     if found:
+                        grandmother = genparts[mother.motherRef().index()]
+                        branches[pfx+"genMatch_grandmotherId"][0] = grandmother.pdgId()
                         branches[pfx+"genMatch_motherId"][0] = mother.pdgId()
                         branches[pfx+"genMatch_mothervx"][0] = mother.vx()
                         branches[pfx+"genMatch_mothervy"][0] = mother.vy()
                         branches[pfx+"genMatch_mothervz"][0] = mother.vz()
+                        # for BToPhi, need to subtract out B displacement (done)
                         # https://arxiv.org/pdf/1710.08949.pdf eq 1
-                        ct = (matched_genmu.vx()*mother.px()+matched_genmu.vy()*mother.py())*mother.mass()/mother.pt()**2.
+                        vx = matched_genmu.vx()
+                        vy = matched_genmu.vy()
+                        if self.is_btophi:
+                            vx -= mother.vx()
+                            vy -= mother.vy()
+                        ct = (vx*mother.px()+vy*mother.py())*mother.mass()/mother.pt()**2.
                         branches[pfx+"genMatch_motherct"][0] = ct
                     else:
+                        branches[pfx+"genMatch_grandmotherId"][0] = 0
                         branches[pfx+"genMatch_motherId"][0] = 0
                         branches[pfx+"genMatch_mothervx"][0] = 0.
                         branches[pfx+"genMatch_mothervy"][0] = 0.
@@ -979,6 +1161,7 @@ class Looper(object):
                 dimuon_corr = (mu1p4_corr+mu2p4_corr)
 
                 ctau = lxy*cosphi*dimuon_corr.M()/dimuon_corr.Pt()
+
 
                 absdphimumu = abs(mu1p4.DeltaPhi(mu2p4))
                 absdphimudv = abs(vecdimuon2d.DeltaPhi(vecdv2d))
@@ -1053,6 +1236,7 @@ class Looper(object):
 
             # Fill some branches for subleading DV and associated muons, if they exist
             if len(selected_dvs) >= 2 and len(selected_muons) >= 4:
+
                 mu1 = selected_muons[2]
                 mu2 = selected_muons[3]
                 dv = selected_dvs[1]
@@ -1062,12 +1246,83 @@ class Looper(object):
                 mu2p4.SetPtEtaPhiM(mu2.pt(), mu2.eta(), mu2.phi(), MUON_MASS)
                 dimuon = (mu1p4+mu2p4)
                 vecdv2d = r.TVector2(dv.x()-pvmx, dv.y()-pvmy)
+                vecdimuon2d = r.TVector2(dimuon.Px(),dimuon.Py())
+                cosphi = (vecdv2d.Px()*vecdimuon2d.Px() + vecdv2d.Py()*vecdimuon2d.Py()) / (vecdv2d.Mod()*vecdimuon2d.Mod())
                 lxy = vecdv2d.Mod()
+                logabsetaphi = math.log10(max(abs(mu1p4.Eta()-mu2p4.Eta()),1e-6)/max(abs(mu1p4.DeltaPhi(mu2p4)),1e-6))
+                dimuon_isos = mu1.charge()*mu2.charge() < 0
+
+                # corrected p4s with phi calculated at DV instead of track reference point.
+                mu1p4_corr = r.TLorentzVector()
+                mu2p4_corr = r.TLorentzVector()
+                mu1p4_corr.SetPtEtaPhiM(mu1.pt(), mu1.eta(), mu1.phi_corr, MUON_MASS)
+                mu2p4_corr.SetPtEtaPhiM(mu2.pt(), mu2.eta(), mu2.phi_corr, MUON_MASS)
+                # save nominal 2 muons first
+                orig_dimuon_corr = dimuon_corr
+                dimuon_corr = (mu1p4_corr+mu2p4_corr)
+                ctau = lxy*cosphi*dimuon_corr.M()/dimuon_corr.Pt()
+                fourmuon = (orig_dimuon_corr + dimuon_corr)
+
+
+
+                absdphimumu = abs(mu1p4.DeltaPhi(mu2p4))
+                absdphimudv = abs(vecdimuon2d.DeltaPhi(vecdv2d))
                 dimuon_isos = mu1.charge()*mu2.charge() < 0
                 branches["sublead_dimuon_isos"][0] = dimuon_isos
-                branches["sublead_dimuon_mass"][0] = dimuon.M()
-                branches["sublead_logabsetaphi"][0] = math.log10(max(abs(mu1p4.Eta()-mu2p4.Eta()),1e-6)/max(abs(mu1p4.DeltaPhi(mu2p4)),1e-6))
+                branches["sublead_dimuon_pt"][0] = dimuon_corr.Pt()
+                branches["sublead_dimuon_eta"][0] = dimuon_corr.Eta()
+                branches["sublead_dimuon_phi"][0] = dimuon_corr.Phi()
+                branches["sublead_dimuon_mass"][0] = dimuon_corr.M()
+                branches["sublead_mass"][0] = dimuon_corr.M()
+                branches["sublead_absdphimumu"][0] = absdphimumu
+                branches["sublead_absdphimudv"][0] = absdphimudv
+                branches["sublead_minabsdxy"][0] = min(abs(mu1.dxyCorr),abs(mu2.dxyCorr))
+                branches["sublead_logabsetaphi"][0] = logabsetaphi
                 branches["sublead_lxy"][0] = lxy
+
+                pass_excesshits = (
+                        (lxy < 3.5) or 
+                            ( (mu1.nValidPixelHits() - mu1.nExpectedPixelHits <= 0) and
+                              (mu2.nValidPixelHits() - mu2.nExpectedPixelHits <= 0)
+                            )
+                        )
+                pass_materialveto = (dv.distPixel > 0.05)
+                pass_dxyscaled = (
+                        (abs(mu1.dxyCorr/(lxy*dimuon_corr.M()/dimuon_corr.Pt())) > 0.1) and
+                        (abs(mu2.dxyCorr/(lxy*dimuon_corr.M()/dimuon_corr.Pt())) > 0.1)
+                        )
+                pass_dxysig = (
+                        (abs(mu1.dxyCorr/mu1.dxyError()) > 2) and
+                        (abs(mu2.dxyCorr/mu2.dxyError()) > 2)
+                        )
+
+                branches["sublead_pass_genmatch"][0] = ((mu1.genMatch_dr < 0.1) and (mu2.genMatch_dr < 0.1)) or (not self.is_mc)
+                branches["sublead_pass_excesshits"][0] = pass_excesshits
+                branches["sublead_pass_materialveto"][0] = pass_materialveto
+                branches["sublead_pass_dxyscaled"][0] = pass_dxyscaled
+                branches["sublead_pass_dxysig"][0] = pass_dxysig
+
+                # Baseline selection
+                pass_baseline = (
+                        True
+                        and mu1.passid
+                        and mu2.passid
+                        and (absdphimumu < 2.8)
+                        and (absdphimudv < 0.02)
+                        and dimuon_isos
+                        and pass_l1
+                        and (lxy < 11.)
+                        )
+                pass_baseline_iso = pass_baseline and (mu1.passiso and mu2.passiso)
+                pass_extra = pass_excesshits and pass_materialveto and (logabsetaphi < 1.25)
+
+                branches["sublead_pass_baseline"][0] = pass_baseline
+                branches["sublead_pass_baseline_iso"][0] = pass_baseline_iso
+                branches["sublead_pass_baseline_extra"][0] = pass_baseline and pass_extra
+                branches["sublead_pass_baseline_extra_iso"][0] = pass_baseline_iso and pass_extra
+                branches["sublead_pass_all"][0] = pass_baseline_iso and pass_extra and pass_dxyscaled and pass_dxysig
+
+                branches["FourMuon_mass"][0] = fourmuon.M()
 
             self.outtree.Fill()
 
@@ -1076,6 +1331,7 @@ class Looper(object):
         neventsout = self.outtree.GetEntries()
         self.outtree.Write()
 
+
         
         # number of events in the input chain
         r.TParameter(int)("nevents_input",nevents_in).Write()
@@ -1083,20 +1339,59 @@ class Looper(object):
         r.TParameter(int)("nevents_processed",ievt).Write()
         # number of events in the output tree
         r.TParameter(int)("nevents_output",self.outtree.GetEntries()).Write()
+        # r.TParameter(int)("nevents_prefilter",self.eff_info.get("ntotal",-1)).Write()
+        # r.TParameter(int)("nevents_postfilter",self.eff_info.get("npassed",-1)).Write()
 
-        # # Embed babymaking code inside root file
-        # metadata = dict(
-        #         # babymaker code
-        #         babymaker = open(__file__,"r").read(),
-        #         # number of events in the input chain
-        #         nevents_input = nevents_in,
-        #         # number of events we actually looped over
-        #         nevents_processed = ievt,
-        #         # number of events in the output tree
-        #         nevents_output = self.outtree.GetEntries(),
-        #         input_fnames = ",".join(self.fnames),
-        #         )
-        # write_metadata_to_tfile(self.outfile, metadata)
+        if self.is_btophi:
+            fh_btophi.close()
+            btophitree = r.TTree("btophitree","")
+            branches = dict()
+            def make_branch(name, tstr):
+                obj = array.array(tstr,[999])
+                btophitree.Branch(name, obj, "{}/{}".format(name, tstr.upper()))
+                branches[name] = obj
+            make_branch("BToPhi_nphi", "i")
+            make_branch("BToPhi_mu1pt", "f")
+            make_branch("BToPhi_mu2pt", "f")
+            make_branch("BToPhi_mu1eta", "f")
+            make_branch("BToPhi_mu2eta", "f")
+            make_branch("BToPhi_phimass", "f")
+            make_branch("BToPhi_phipt", "f")
+            make_branch("BToPhi_phieta", "f")
+            make_branch("BToPhi_bmesonmass", "f")
+            make_branch("BToPhi_bmesonid", "i")
+            make_branch("BToPhi_bmesonpt", "f")
+            make_branch("BToPhi_bmesoneta", "f")
+            with open(".temp_btophi_{}.dat".format(randid), "r") as fh:
+                for line in fh:
+                    if not line.strip(): continue
+                    for v in branches.values():
+                        v = 999
+                    d = ast.literal_eval(line)
+                    for k,v in d.items():
+                        branches["BToPhi_{}".format(k)][0] = v
+                    btophitree.Fill()
+            btophitree.Write()
+
+        if self.is_hzdzd:
+            fh_hzdzd.close()
+            hzdzdtree = r.TTree("hzdzdtree","")
+            branches = dict()
+            def make_branch(name, tstr):
+                obj = array.array(tstr,[999])
+                hzdzdtree.Branch(name, obj, "{}/{}".format(name, tstr.upper()))
+                branches[name] = obj
+            make_branch("HZdZd_nzd", "i")
+            with open(".temp_hzdzd_{}.dat".format(randid), "r") as fh:
+                for line in fh:
+                    if not line.strip(): continue
+                    for v in branches.values():
+                        v = 999
+                    d = ast.literal_eval(line)
+                    for k,v in d.items():
+                        branches["HZdZd_{}".format(k)][0] = v
+                    hzdzdtree.Fill()
+            hzdzdtree.Write()
 
         self.outfile.Close()
 

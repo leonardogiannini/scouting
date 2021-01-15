@@ -32,6 +32,9 @@ HitMaker::HitMaker(const edm::ParameterSet& iConfig)
     produces<vector<int> >("nexpectedhits").setBranchAlias("Muon_nExpectedPixelHits");
     produces<vector<int> >("ncompatible").setBranchAlias("Muon_nCompatiblePixelLayers");
     produces<vector<int> >("nexpectedhitsmultiple").setBranchAlias("Muon_nExpectedPixelHitsMultiple");
+    produces<vector<float> >("pxatdv").setBranchAlias("Muon_pxatdv");
+    produces<vector<float> >("pyatdv").setBranchAlias("Muon_pyatdv");
+    produces<vector<float> >("pzatdv").setBranchAlias("Muon_pzatdv");
 }
 
 HitMaker::~HitMaker(){
@@ -81,6 +84,9 @@ void HitMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
     unique_ptr<vector<int> > v_nexpectedhits(new vector<int>);
     unique_ptr<vector<int> > v_ncompatible(new vector<int>);
     unique_ptr<vector<int> > v_nexpectedhitsmultiple(new vector<int>);
+    unique_ptr<vector<float> > v_pxatdv(new vector<float>);
+    unique_ptr<vector<float> > v_pyatdv(new vector<float>);
+    unique_ptr<vector<float> > v_pzatdv(new vector<float>);
 
     for (auto const& muon : *muonHandle) {
         vector<int> vertex_indices = muon.vtxIndx();
@@ -225,6 +231,10 @@ void HitMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
             }
         }
 
+        float pxatdv = startingStateP.globalMomentum().x();
+        float pyatdv = startingStateP.globalMomentum().y();
+        float pzatdv = startingStateP.globalMomentum().z();
+
 
         // or could get searchGeom.allLayers() and require layer->subDetector() enum is PixelBarrel/PixelEndcap 
         vector<DetLayer const*> layers_pixel;
@@ -295,6 +305,9 @@ void HitMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
         v_nexpectedhits->push_back(nexpectedhits);
         v_ncompatible->push_back(ncompatible);
         v_nexpectedhitsmultiple->push_back(nexpectedhitsmultiple);
+        v_pxatdv->push_back(pxatdv);
+        v_pyatdv->push_back(pyatdv);
+        v_pzatdv->push_back(pzatdv);
 
         if (debug) {
             std::cout <<  " valid: " << nvalidpixelhits <<  " exp: " << nexpectedhits <<  " expmultiple: " << nexpectedhitsmultiple 
@@ -322,6 +335,9 @@ void HitMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
     iEvent.put(std::move(v_nexpectedhits), "nexpectedhits");
     iEvent.put(std::move(v_ncompatible), "ncompatible");
     iEvent.put(std::move(v_nexpectedhitsmultiple), "nexpectedhitsmultiple");
+    iEvent.put(std::move(v_pxatdv), "pxatdv");
+    iEvent.put(std::move(v_pyatdv), "pyatdv");
+    iEvent.put(std::move(v_pzatdv), "pzatdv");
 }
 
 DEFINE_FWK_MODULE(HitMaker);

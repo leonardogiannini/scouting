@@ -14,6 +14,7 @@ The READMEs contained within each folder contain more details. Here's a summary:
 ### [Beamspot](beamspot/)
 
 * Lookup tables for beamspot position
+* Deprecated (getting BS within CMSSW now)
 
 ### [Geometry](geometry/)
 
@@ -23,4 +24,8 @@ The READMEs contained within each folder contain more details. Here's a summary:
 ### [Generation](generation/)
 
 * Signal generation
+
+### [Theory](theory/)
+
+* Misc theory-related stuff for HZdZd and BToPhi models (BRs, xsec, ...)
 

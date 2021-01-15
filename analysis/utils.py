@@ -560,7 +560,7 @@ def make_df(
 
     chunks, total_events = get_chunking(tuple(paths), chunksize, client=client, xrootd=xrootd, use_dask=use_dask, skip_bad_files=skip_bad_files)
 
-    smallchunk_nevents = int(chunks[0][1] + (chunks[0][2]-chunks[0][1])//10)
+    smallchunk_nevents = int(max(chunks[0][1] + (chunks[0][2]-chunks[0][1])//10, 1))
     smallchunk = (chunks[0][0], chunks[0][1], smallchunk_nevents)
     meta = func(*smallchunk)
 

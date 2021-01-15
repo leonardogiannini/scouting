@@ -85,7 +85,10 @@ process.GlobalTag.globaltag = gtag
 process.maxEvents = cms.untracked.PSet(
     input = cms.untracked.int32(opts.nevents)
 )
-process.MessageLogger.cerr.FwkReport.reportEvery = 5000
+if opts.data:
+    process.MessageLogger.cerr.FwkReport.reportEvery = 5000
+else:
+    process.MessageLogger.cerr.FwkReport.reportEvery = 100
 process.MessageLogger.suppressWarning = cms.untracked.vstring(["MeasurementTrackerEvent"])
 
 # Input source

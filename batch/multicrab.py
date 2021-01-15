@@ -11,9 +11,7 @@ from metis.CrabManager import CrabManager
 def get_proxy_file():
     return "/tmp/x509up_u{0}".format(os.getuid())
 
-def get_config_for_era(era, version, do_unblind=False):
-    # sorry, name might be stupid. `do_unblind` means we process
-    # the unblinded subset only.
+def get_config_for_era(era, version, do_unblind_subset=False):
 
     # https://twiki.cern.ch/twiki/bin/view/CMSPublic/CRAB3ConfigurationFile
     cfg = config()
@@ -21,7 +19,7 @@ def get_config_for_era(era, version, do_unblind=False):
     cfg.General.requestName = 'skim_{}_{}{}'.format(
             era,
             version,
-            ("_unblind" if do_unblind else "")
+            ("_unblindsubset" if do_unblind_subset else "")
             )
     cfg.Data.inputDataset = '/ScoutingCaloMuon/Run{}-v1/RAW'.format(era)
 
@@ -40,7 +38,7 @@ def get_config_for_era(era, version, do_unblind=False):
         cfg.Data.lumiMask = "data/Cert_314472-325175_13TeV_PromptReco_Collisions18_JSON.txt"
     if "2017" in era:
         cfg.Data.lumiMask = "data/Cert_294927-306462_13TeV_EOY2017ReReco_Collisions17_JSON.txt"
-    if do_unblind:
+    if do_unblind_subset:
         cfg.Data.lumiMask = "data/Cert_2017-2018_10percentbyrun_JSON.txt"
 
     cfg.Data.publication = False
@@ -50,26 +48,32 @@ def get_config_for_era(era, version, do_unblind=False):
 def do_submit(q, config, proxy):
     extra = dict(config=config)
     if proxy: extra["proxy"] = proxy
-    out = crabCommand('submit', **extra)
+    # out = crabCommand('submit', config=config, proxy=proxy)
+    out = crabCommand('submit', config=config)
     q.put(out)
 
 if __name__ == "__main__":
 
-    version = "v12"
-    do_unblind = False
+    version = "v13"
+    do_unblind_subset = False
     proxy = get_proxy_file()
+    taskdirs = []
     for era in [
-            "2017C",
-            "2017D",
-            "2017E",
-            "2017F",
-            "2018A",
+
+            # "2017C",
+            # "2017D",
+            # "2017E",
+            # "2017F",
+            # "2018A",
+            # "2018C",
+
             "2018B",
-            "2018C",
             "2018D",
+
             ]:
-        cfg = get_config_for_era(era=era, version=version, do_unblind=do_unblind)
+        cfg = get_config_for_era(era=era, version=version, do_unblind_subset=do_unblind_subset)
         taskdir = "{}/crab_{}/".format(cfg.General.workArea, cfg.General.requestName)
+        taskdirs.append(taskdir)
         if os.path.exists(taskdir):
             print("Task dir {} already exists.".format(taskdir))
             continue
@@ -82,29 +86,37 @@ if __name__ == "__main__":
         print(out)
 
     statuses = {}
-    taskdirs = glob.glob("crab/crab_skim_201*_{}/".format(version))
     for taskdir in taskdirs:
         print("\n\n----- {} -----".format(taskdir))
         cm = CrabManager(request_name=taskdir)
 
-        js = cm.crab_status()
+        # js = cm.crab_status(cacheseconds=1*60*60)
+        js = cm.crab_status(cacheseconds=1)
+        # js = cm.crab_status(cacheseconds=10*60)
         js.pop("job_info")
-        pprint(js)
+        print(js)
+        # pprint(js)
 
         statuses[taskdir] = js
 
-        # try:
-        #     js = cm.crab_resubmit()
-        #     pprint(js)
-        # except:
-        #     pass
+        has_failures = js["job_breakdown"].get("failed",0) > 0
+        if has_failures:
+            try:
+                js = cm.crab_resubmit()
+                pprint(js)
+            except:
+                pass
 
     src = """
 <html>
 <head>
 <style>
 .progress {
-width: 40%;
+  width: 60%;
+}
+.container {
+  width: 50%;
+  margin-top: 10px;
 }
 </style>
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js" crossorigin="anonymous"></script>
@@ -121,19 +133,15 @@ width: 40%;
         nfailed = (job_breakdown["failed"])
         nidle = (job_breakdown["unsubmitted"]+job_breakdown["idle"]+job_breakdown["cooloff"])
         div = """
-{taskdir}
-<div class="progress">
-  <div class="progress-bar bg-success" role="progressbar" style="width:{pctdone}%">
-  {ndone} done
-  </div>
-  <div class="progress-bar bg-info" role="progressbar" style="width:{pctrunning}%">
-  {nrunning} running
-  </div>
-  <div class="progress-bar bg-danger" role="progressbar" style="width:{pctfailed}%">
-  {nfailed} failed
-  </div>
-  <div class="progress-bar bg-warning" role="progressbar" style="width:{pctidle}%">
-  {nidle} idle
+<div class="container">
+  <div class="row">
+    <span class="col-sm-4">{taskdir}</span>
+    <div class="progress" class="col-sm-8">
+      <div class="progress-bar bg-success" role="progressbar" style="width:{pctdone}%"> {ndone} done </div>
+      <div class="progress-bar bg-info" role="progressbar" style="width:{pctrunning}%"> {nrunning} running </div>
+      <div class="progress-bar bg-danger" role="progressbar" style="width:{pctfailed}%"> {nfailed} failed </div>
+      <div class="progress-bar bg-warning" role="progressbar" style="width:{pctidle}%"> {nidle} idle </div>
+    </div>
   </div>
 </div>
         """.format(

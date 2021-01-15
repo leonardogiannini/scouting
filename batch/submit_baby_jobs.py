@@ -28,7 +28,7 @@ def get_tasks(infos):
             kwargs["MB_per_output"] = (4000 if "skim1cm" in extra_args else 1000)
             batchname = dataset.split("_",1)[-1].split("/")[0]+"_"+tag
         else:
-            kwargs["files_per_output"] = 500
+            kwargs["files_per_output"] = 200
             batchname = "_".join(dataset.split("params_",1)[1].split("/",1)[0].split("_")[:2] + [tag])
         task = CondorTask(
                 sample = DirectorySample(location=location,dataset=dataset),
@@ -38,6 +38,7 @@ def get_tasks(infos):
                 executable = "executables/scouting_exe.sh",
                 tarfile = "package.tar.gz",
                 condor_submit_params = {
+                    "container": "/cvmfs/singularity.opensciencegrid.org/cmssw/cms:rhel6-m202006",
                     "sites":"T2_US_UCSD",
                     "classads": [
                         ["metis_extraargs",extra_args],
@@ -85,8 +86,8 @@ def get_bg_tasks(tag,extra_args=""):
 
 if __name__ == "__main__":
 
-    # print("Did you do `./make_tar.sh`? Sleeping for 5s for you to quit if not.")
-    # time.sleep(5)
+    print("Did you do `./make_tar.sh`? Sleeping for 3s for you to quit if not.")
+    time.sleep(3)
 
     # each task needs 
     # - a location (path to input root files)
@@ -96,66 +97,58 @@ if __name__ == "__main__":
     # extra parameters to the babymaker can be passed with extra_args.
     infos = []
 
-    # tag = "v22" # MC and all data
-    tag = "v23" # MC and unblinded data
 
     # DATA
+    tag_data, tag_mc = "fourmuv24", "vtestfine2"
     infos.extend([
-
-            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018A_v11_unblind/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018A_v11_unblind/RAW", tag=tag, isdata=True, extra_args="--year 2018"),
-            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018B_v11_unblind/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018B_v11_unblind/RAW", tag=tag, isdata=True, extra_args="--year 2018"),
-            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018C_v11_unblind/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018C_v11_unblind/RAW", tag=tag, isdata=True, extra_args="--year 2018"),
-            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018D_v11_unblind/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018D_v11_unblind/RAW", tag=tag, isdata=True, extra_args="--year 2018"),
-            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017C_v11_unblind/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017C_v11_unblind/RAW", tag=tag, isdata=True, extra_args="--year 2017"),
-            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017D_v11_unblind/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017D_v11_unblind/RAW", tag=tag, isdata=True, extra_args="--year 2017"),
-            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017E_v11_unblind/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017E_v11_unblind/RAW", tag=tag, isdata=True, extra_args="--year 2017"),
-            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017F_v11_unblind/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017F_v11_unblind/RAW", tag=tag, isdata=True, extra_args="--year 2017"),
-
-            # dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018A_v11/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018A_v11/RAW", tag=tag, isdata=True, extra_args="--year 2018"),
-            # dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018B_v11/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018B_v11/RAW", tag=tag, isdata=True, extra_args="--year 2018"),
-            # dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018C_v11/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018C_v11/RAW", tag=tag, isdata=True, extra_args="--year 2018"),
-            # dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018D_v11/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018D_v11/RAW", tag=tag, isdata=True, extra_args="--year 2018"),
-            # dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017C_v11/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017C_v11/RAW", tag=tag, isdata=True, extra_args="--year 2017"),
-            # dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017D_v11/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017D_v11/RAW", tag=tag, isdata=True, extra_args="--year 2017"),
-            # dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017E_v11/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017E_v11/RAW", tag=tag, isdata=True, extra_args="--year 2017"),
-            # dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017F_v11/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017F_v11/RAW", tag=tag, isdata=True, extra_args="--year 2017"),
-
+            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018A_v12_unblindsubset/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018A_v12/RAW", tag=tag_data, isdata=True, extra_args="--year 2018"),
+            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018B_v12_unblindsubset/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018B_v12/RAW", tag=tag_data, isdata=True, extra_args="--year 2018"),
+            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018C_v12_unblindsubset/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018C_v12/RAW", tag=tag_data, isdata=True, extra_args="--year 2018"),
+            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018D_v12_unblindsubset/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018D_v12/RAW", tag=tag_data, isdata=True, extra_args="--year 2018"),
+            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017C_v12_unblindsubset/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017C_v12/RAW", tag=tag_data, isdata=True, extra_args="--year 2017"),
+            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017D_v12_unblindsubset/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017D_v12/RAW", tag=tag_data, isdata=True, extra_args="--year 2017"),
+            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017E_v12_unblindsubset/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017E_v12/RAW", tag=tag_data, isdata=True, extra_args="--year 2017"),
+            dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017F_v12_unblindsubset/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017F_v12/RAW", tag=tag_data, isdata=True, extra_args="--year 2017"),
             ])
 
+    # tag_data, tag_mc = "v25", "vtestfine2"
+    # infos.extend([
+    #         dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018A_v13/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018A_v13/RAW", tag=tag_data, isdata=True, extra_args="--year 2018"),
+    #         dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018B_v13/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018B_v13/RAW", tag=tag_data, isdata=True, extra_args="--year 2018"),
+    #         dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018C_v13/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018C_v13/RAW", tag=tag_data, isdata=True, extra_args="--year 2018"),
+    #         dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2018D_v13/*/*/", dataset="/ScoutingCaloMuon/Run2018skim_2018D_v13/RAW", tag=tag_data, isdata=True, extra_args="--year 2018"),
+    #         dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017C_v13/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017C_v13/RAW", tag=tag_data, isdata=True, extra_args="--year 2017"),
+    #         dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017D_v13/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017D_v13/RAW", tag=tag_data, isdata=True, extra_args="--year 2017"),
+    #         dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017E_v13/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017E_v13/RAW", tag=tag_data, isdata=True, extra_args="--year 2017"),
+    #         dict(location="/hadoop/cms/store/user/namin/ScoutingCaloMuon/crab_skim_2017F_v13/*/*/", dataset="/ScoutingCaloMuon/Run2017skim_2017F_v13/RAW", tag=tag_data, isdata=True, extra_args="--year 2017"),
+    #         ])
+
+
+    # # MC
+    # locations = []
+    # locations += glob.glob("/hadoop/cms/store/user/namin/ProjectMetis/HToZdZdTo2Mu2X_params_m*_ctau*mm_RAWSIM_vtestfine2/")
+    # locations += glob.glob("/hadoop/cms/store/user/namin/ProjectMetis/BToPhi_params_m*_ctau*mm_RAWSIM_vtestfine2/")
+    # for location in locations:
+    #     taskname = location.rstrip("/").rsplit("/")[-1]
+    #     dataset = "/{}/{}/BABY".format(
+    #             taskname.split("_",1)[0],
+    #             taskname.split("_",1)[1].split("_RAWSIM")[0],
+    #             )
+    #     infos.append(dict(location=location, dataset=dataset, isdata=False, tag=tag_mc, extra_args="--year 2018"))
+
     # MC
-    locations = glob.glob("/hadoop/cms/store/user/namin/ProjectMetis/HToZdZdTo2Mu2X_params_mzd*_ctau*mm_RAWSIM_v10/")
+    locations = []
+    tag_mc = "fourmuv24"
+    locations += glob.glob("/hadoop/cms/store/user/namin/aodsim4mu/HToZdZdTo4Mu_params_mzd*_ctau1mm_SKIM_v1")
     for location in locations:
         taskname = location.rstrip("/").rsplit("/")[-1]
         dataset = "/{}/{}/BABY".format(
                 taskname.split("_",1)[0],
-                taskname.split("_",1)[1].split("_RAWSIM")[0],
+                taskname.split("_",1)[1].split("_SKIM")[0],
                 )
-        infos.append(dict(location=location, dataset=dataset, isdata=False, tag=tag, extra_args="--year 2018"))
-
-    infos.append(dict(
-        location="/hadoop/cms/store/user/namin/DisplacedMuons/2017/DirectGluonFusion_PhiToMuMu/ggPhimumu_Phimass2_Phictau0_5_part1/",
-        dataset="/GGPhiToMuMu/params_mphi2_ctau0p5mm/BABY",
-        isdata=False,
-        tag=tag,
-        extra_args="--year 2017",
-        ))
-
-    infos.append(dict(
-        location="/hadoop/cms/store/user/namin/ProjectMetis/BToPhi_params_mphi2_ctau20mm_RAWSIM_v0/",
-        dataset="/BToPhi/params_mphi2_ctau20mm/BABY",
-        isdata=False,
-        tag=tag,
-        extra_args="--year 2017",
-        ))
-        
-    # pprint(infos,width=200)
-    # sys.exit()
+        infos.append(dict(location=location, dataset=dataset, isdata=False, tag=tag_mc, extra_args="--year 2018"))
 
     tasks = get_tasks(infos)
-
-    # tasks.extend(get_bg_tasks(
-    #         tag="v7",
-    #         ))
 
     for _ in range(500):
         total_summary = {}

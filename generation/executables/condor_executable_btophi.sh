@@ -7,15 +7,6 @@ IFILE=$4
 CMSSWVERSION=$5
 SCRAMARCH=$6
 
-# # FIXME FIXME
-# OUTPUTDIR="/hadoop/cms/store/user/namin/metis_test/dimuon/"
-# OUTPUTNAME="output"
-# INPUTFILENAMES="dummy"
-# IFILE="15"
-# CMSSWVERSION="dummy"
-# SCRAMARCH="slc6_amd64_gcc700"
-# NEVENTS="2"
-
 # Make sure OUTPUTNAME doesn't have .root since we add it manually
 OUTPUTNAME=$(echo $OUTPUTNAME | sed 's/\.root//')
 
@@ -104,40 +95,12 @@ function setup_cmssw {
   cd -
 }
 
-function edit_gridpack {
-    # extract gridpack in temp dir
-    # overwrite 2 parameters
-    # copy back the new one, overwriting the original
-    filename="$1"
-    mass="$2" # GeV
-    ctau="$3" # mm
-    bname=$(basename $filename)
-    pushd .
-    tempdir=$(mktemp -d)
-    echo $tempdir
-    cp $filename $tempdir
-    cd $tempdir
-    ls -lrth
-    tar xf $bname
-    sed -i 's/MZprime=\w\+/MZprime='"$mass"'/' JHUGen.input
-    sed -i 's/ctauVprime=\w\+/ctauVprime='"$ctau"'/' JHUGen.input
-    rm $bname
-    tar czf $bname *
-    popd
-    cp $tempdir/$bname $filename
-}
-
 
 function edit_psets {
-    gridpack="$1"
-    seed=$2
-    nevents=$3
-    absgridpack=$(readlink -f "$gridpack")
+    seed=$1
+    nevents=$2
 
     # gensim
-    echo "process.RandomNumberGeneratorService.externalLHEProducer.initialSeed = $seed" >> $gensimcfg
-    echo "process.externalLHEProducer.args = [\"$absgridpack\"]" >> $gensimcfg
-    echo "process.externalLHEProducer.nEvents = $nevents" >> $gensimcfg
     echo "process.maxEvents.input = $nevents" >> $gensimcfg
     echo "process.source.firstLuminosityBlock = cms.untracked.uint32($seed)" >> $gensimcfg
     echo "process.RAWSIMoutput.fileName = \"file:output_gensim.root\"" >> $gensimcfg
@@ -199,8 +162,7 @@ echo "CTAU: $CTAU"
 echo -e "\n--- end header output ---\n" #                       <----- section division
 
 
-gridpack="gridpacks/gridpack.tar.gz"
-gensimcfg="psets/2018/gensim_cfg.py"
+gensimcfg="psets/2018/gensim_btophi_cfg.py"
 rawsimcfg="psets/2018/rawsim_cfg.py"
 aodsimcfg="psets/2018/aodsim_cfg.py"
 miniaodsimcfg="psets/2018/miniaodsim_cfg.py"
@@ -216,8 +178,12 @@ cd temp
 cp ../*.gz .
 tar xf *.gz
 
-edit_gridpack $gridpack $MASS $CTAU
-edit_psets $gridpack $IFILE $NEVENTS
+edit_psets $IFILE $NEVENTS
+
+mass=$(echo $MASS | sed 's/p/./')
+ctau=$(echo $CTAU | sed 's/p/./')
+sed -i 's/mass = [0-9\.]\+ # TO SED/mass = '"$mass"' # TO SED/' $gensimcfg
+sed -i 's/ctau = [0-9\.]\+ # TO SED/ctau = '"$ctau"' # TO SED/' $gensimcfg
 
 echo "before running: ls -lrth"
 ls -lrth

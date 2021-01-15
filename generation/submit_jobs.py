@@ -7,54 +7,67 @@ import time
 
 import itertools
 
-def submit():
+def submit(which):
     total_summary = {}
 
     extra_requirements = "true"
 
-    # blacklisted_machines = [
-    #          "cabinet-4-4-29.t2.ucsd.edu",
-    #          "cabinet-7-7-36.t2.ucsd.edu",
-    #          "cabinet-8-8-1.t2.ucsd.edu",
-    #          "sdsc-37.t2.ucsd.edu",
-    #          ]
-    # if blacklisted_machines:
-    #     extra_requirements = " && ".join(map(lambda x: '(TARGET.Machine != "{0}")'.format(x),blacklisted_machines))
+    if which == "hzdzd":
+        tag = "vtestfine2"
+        events_per_point = 30000
+        events_per_job = 500
+        masses = [0.25,0.3,0.4,0.5,0.6,0.75,1,1.25,1.5,2,2.5,3,4,5,6,8,10,12,15,18,21,25]
+        ctaus = [1,10,100,1000]
+        sname = "zd"
+        pdname = "HToZdZdTo2Mu2X"
 
-    # Edit these parameters.
-    # in total, there will be `len(masses)*len(ctaus)*events_per_point` events
+        # # FIXME
+        # ctaus = [10]
+        # masses = [8]
+        # events_per_point *= 10
 
-    # tag = "v9"
-    # events_per_point = 50000
-    # events_per_job = 500
-    # masses = [2,5,8,10,15,20]
-    # ctaus = [1,5,10,25,50]
+    elif which == "btophi":
 
-    # tag = "vtest"
-    # events_per_point = 10
-    # events_per_job = 10
-    # masses = [8]
-    # ctaus = [5]
+        # tag = "vtestfine2"
+        # events_per_point = 1000000 # 2000000
+        # events_per_job = 5000 # filter efficiency around 4%
+        # masses = [0.25,0.3,0.4,0.5,0.6,0.75,1,1.25,1.5,2,2.5,3,3.5,4,4.5]
+        # ctaus = [1,10,100,1000]
+        # sname = "phi"
+        # pdname = "BToPhi"
 
-    tag = "v10"
-    events_per_point = 100000
-    events_per_job = 500
-    masses = [2,8,12,15]
-    ctaus = [1,10,50,100]
+        tag = "vtestfine2"
+        events_per_point = 1000000 # 2000000
+        events_per_job = 5000 # filter efficiency around 4%
+        masses = [4.5, 5.0]
+        ctaus = [1,10,100,1000]
+        sname = "phi"
+        pdname = "BToPhi"
+
+    else:
+        raise Exception()
 
     for mass,ctau in itertools.product(masses,ctaus):
 
-        reqname = "mzd{}_ctau{}_{}".format(mass,ctau,tag)
-        njobs = int(events_per_point)//events_per_job
+        fmass = float(mass)
+        mass = str(mass).replace(".","p")
+
+        epp = int(events_per_point)
+
+        if which == "hzdzd":
+            if fmass <= 2:
+                epp *= 12
+
+        reqname = "m{}{}_ctau{}_{}".format(sname,mass,ctau,tag)
+        njobs = epp//events_per_job
         task = CondorTask(
-                sample = DummySample(dataset="/HToZdZdTo2Mu2X/params_mzd{}_ctau{}mm/RAWSIM".format(mass,ctau),N=njobs,nevents=int(events_per_point)),
+                sample = DummySample(dataset="/{}/params_m{}{}_ctau{}mm/RAWSIM".format(pdname,sname,mass,ctau),N=njobs,nevents=epp),
                 output_name = "output.root",
-                executable = "executables/condor_executable.sh",
+                executable = "executables/condor_executable_{}.sh".format(which),
                 tarfile = "package.tar.gz",
                 open_dataset = True,
                 files_per_output = 1,
                 condor_submit_params = {
-                    # "sites":"T2_US_UCSD",
                     "classads": [
                         ["param_mass",mass],
                         ["param_ctau",ctau],
@@ -75,6 +88,7 @@ def submit():
 if __name__ == "__main__":
 
     for i in range(500):
-        submit()
-        time.sleep(60*60)
+        # submit("hzdzd")
+        submit("btophi")
+        time.sleep(2*60*60)
 
