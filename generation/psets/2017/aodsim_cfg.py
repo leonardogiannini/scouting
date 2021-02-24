@@ -6,9 +6,8 @@
 import FWCore.ParameterSet.Config as cms
 
 from Configuration.StandardSequences.Eras import eras
-from Configuration.ProcessModifiers.premix_stage2_cff import premix_stage2
 
-process = cms.Process('RECO',eras.Run2_2018,premix_stage2)
+process = cms.Process('RECO',eras.Run2_2017)
 
 # import of standard configurations
 process.load('Configuration.StandardSequences.Services_cff')
@@ -19,7 +18,6 @@ process.load('SimGeneral.MixingModule.mixNoPU_cfi')
 process.load('Configuration.StandardSequences.GeometryRecoDB_cff')
 process.load('Configuration.StandardSequences.MagneticField_cff')
 process.load('Configuration.StandardSequences.RawToDigi_cff')
-process.load('Configuration.StandardSequences.L1Reco_cff')
 process.load('Configuration.StandardSequences.Reconstruction_cff')
 process.load('Configuration.StandardSequences.RecoSim_cff')
 process.load('CommonTools.ParticleFlow.EITopPAG_cff')
@@ -85,11 +83,10 @@ process.AODSIMoutput = cms.OutputModule("PoolOutputModule",
 
 # Other statements
 from Configuration.AlCa.GlobalTag import GlobalTag
-process.GlobalTag = GlobalTag(process.GlobalTag, '102X_upgrade2018_realistic_v15', '')
+process.GlobalTag = GlobalTag(process.GlobalTag, '94X_mc2017_realistic_v11', '')
 
 # Path and EndPath definitions
 process.raw2digi_step = cms.Path(process.RawToDigi)
-process.L1Reco_step = cms.Path(process.L1Reco)
 process.reconstruction_step = cms.Path(process.reconstruction)
 process.recosim_step = cms.Path(process.recosim)
 process.eventinterpretaion_step = cms.Path(process.EIsequence)
@@ -97,7 +94,7 @@ process.endjob_step = cms.EndPath(process.endOfProcess)
 process.AODSIMoutput_step = cms.EndPath(process.AODSIMoutput)
 
 # Schedule definition
-process.schedule = cms.Schedule(process.raw2digi_step,process.L1Reco_step,process.reconstruction_step,process.recosim_step,process.eventinterpretaion_step,process.endjob_step,process.AODSIMoutput_step)
+process.schedule = cms.Schedule(process.raw2digi_step,process.reconstruction_step,process.recosim_step,process.eventinterpretaion_step,process.endjob_step,process.AODSIMoutput_step)
 from PhysicsTools.PatAlgos.tools.helpers import associatePatAlgosToolsTask
 associatePatAlgosToolsTask(process)
 

@@ -93,6 +93,18 @@ function setup_cmssw {
   cd $CMSSW
   eval $(scramv1 runtime -sh)
   cd -
+
+  # # For Purdue, NotreDame, and maybe Nebraska
+  # if [ ! -e $CMS_PATH/SITECONF/local/JobConfig/site-local-config.xml ] ; then
+  #     echo "$CMS_PATH/SITECONF/local/JobConfig/site-local-config.xml does not exist!"
+  #     if [ -e $CMS_PATH/SITECONF/$GLIDEIN_CMSSite/JobConfig/site-local-config.xml ] ; then
+  #         echo "But $CMS_PATH/SITECONF/$GLIDEIN_CMSSite/JobConfig/site-local-config.xml does exist. Copying it locally."
+  #         mkdir -p ${CMSSW_BASE}/test/SITECONF/local/JobConfig
+  #         cp $CMS_PATH/SITECONF/$GLIDEIN_CMSSite/JobConfig/site-local-config.xml ${CMSSW_BASE}/test/SITECONF/local/JobConfig/site-local-config.xml
+  #         export CMS_PATH=${CMSSW_BASE}/test
+  #     fi
+  # fi
+
 }
 
 function edit_gridpack {
@@ -144,11 +156,6 @@ function edit_psets {
     echo "process.source.fileNames = [\"file:output_rawsim.root\"]" >> $aodsimcfg
     echo "process.AODSIMoutput.fileName = \"file:output_aodsim.root\"" >> $aodsimcfg
 
-    # miniaodsim
-    echo "process.maxEvents.input = $nevents" >> $miniaodsimcfg
-    echo "process.source.fileNames = [\"file:output_aodsim.root\"]" >> $miniaodsimcfg
-    echo "process.MINIAODSIMoutput.fileName = \"file:output_miniaodsim.root\"" >> $miniaodsimcfg
-
     # slimmer
     echo "process.maxEvents.input = $nevents" >> $slimmercfg
     echo "process.source.fileNames = [\"file:output_rawsim.root\"]" >> $slimmercfg
@@ -182,21 +189,22 @@ echo "args: $@"
 echo "tag: $(getjobad tag)"
 echo "taskname: $(getjobad taskname)"
 
+YEAR=$(getjobad param_year)
 MASS=$(getjobad param_mass)
 CTAU=$(getjobad param_ctau)
 NEVENTS=$(getjobad param_nevents)
 echo "MASS: $MASS"
 echo "CTAU: $CTAU"
+echo "YEAR: $YEAR"
 
 echo -e "\n--- end header output ---\n" #                       <----- section division
 
 
 gridpack="gridpacks/gridpack.tar.gz"
-gensimcfg="psets/2018/gensim_hzdzd_cfg.py"
-rawsimcfg="psets/2018/rawsim_cfg.py"
-aodsimcfg="psets/2018/aodsim_cfg.py"
-miniaodsimcfg="psets/2018/miniaodsim_cfg.py"
-slimmercfg="psets/2018/slimmer_cfg.py"
+gensimcfg="psets/$YEAR/gensim_hzdzd_cfg.py"
+rawsimcfg="psets/$YEAR/rawsim_cfg.py"
+aodsimcfg="psets/$YEAR/aodsim_cfg.py"
+slimmercfg="psets/$YEAR/slimmer_cfg.py"
 
 setup_chirp
 setup_environment
@@ -218,9 +226,25 @@ echo -e "\n--- begin running ---\n" #                           <----- section d
 
 chirp ChirpMetisStatus "before_cmsRun"
 
-setup_cmssw CMSSW_10_2_3 slc6_amd64_gcc700 
+if [[ "$YEAR" == "2017" ]]; then
+    CMSSW1=CMSSW_9_3_18
+    CMSSW2=CMSSW_9_4_7
+    SCRAM_ARCH=slc6_amd64_gcc630 
+elif [[ "$YEAR" == "2018" ]]; then
+    CMSSW1=CMSSW_10_2_3
+    CMSSW2=CMSSW_10_2_5
+    SCRAM_ARCH=slc6_amd64_gcc700 
+else
+    echo "YEAR NOT SPECIFIED"
+fi
+
+echo $CMSSW1
+echo $CMSSW2
+echo $SCRAM_ARCH
+
+setup_cmssw $CMSSW1 $SCRAM_ARCH
 cmsRun $gensimcfg
-setup_cmssw CMSSW_10_2_5 slc6_amd64_gcc700 
+setup_cmssw $CMSSW2 $SCRAM_ARCH 
 cmsRun $rawsimcfg
 cmsRun $aodsimcfg
 setup_slimmer
@@ -252,12 +276,15 @@ fi
 echo "time before copy: $(date +%s)"
 chirp ChirpMetisStatus "before_copy"
 
-COPY_SRC="file://`pwd`/${OUTPUTNAME}.root"
-COPY_DEST="gsiftp://gftp.t2.ucsd.edu${OUTPUTDIR}/${OUTPUTNAME}_${IFILE}.root"
-stageout $COPY_SRC $COPY_DEST
 
 COPY_SRC="file://`pwd`/output_aodsim.root"
-COPY_DEST="gsiftp://gftp.t2.ucsd.edu${OUTPUTDIR}/aodsim/output_${IFILE}.root"
+OUTPUTDIRSTORE=$(echo $OUTPUTDIR | sed "s#^/hadoop/cms/store#/store#")
+COPY_DEST="davs://redirector.t2.ucsd.edu:1094${OUTPUTDIRSTORE}/aodsim/output_${IFILE}.root"
+stageout $COPY_SRC $COPY_DEST
+
+COPY_SRC="file://`pwd`/${OUTPUTNAME}.root"
+OUTPUTDIRSTORE=$(echo $OUTPUTDIR | sed "s#^/hadoop/cms/store#/store#")
+COPY_DEST="davs://redirector.t2.ucsd.edu:1094${OUTPUTDIRSTORE}/${OUTPUTNAME}_${IFILE}.root"
 stageout $COPY_SRC $COPY_DEST
 
 echo -e "\n--- end copying output ---\n" #                      <----- section division

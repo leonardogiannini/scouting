@@ -109,10 +109,15 @@ function setup_cmssw {
 
 
 function edit_psets {
-    seed=$1
-    nevents=$2
+    gridpack="$1"
+    seed=$2
+    nevents=$3
+    absgridpack=$(readlink -f "$gridpack")
 
     # gensim
+    echo "process.RandomNumberGeneratorService.externalLHEProducer.initialSeed = $seed" >> $gensimcfg
+    echo "process.externalLHEProducer.args = [\"$absgridpack\"]" >> $gensimcfg
+    echo "process.externalLHEProducer.nEvents = $nevents" >> $gensimcfg
     echo "process.maxEvents.input = $nevents" >> $gensimcfg
     echo "process.source.firstLuminosityBlock = cms.untracked.uint32($seed)" >> $gensimcfg
     echo "process.RAWSIMoutput.fileName = \"file:output_gensim.root\"" >> $gensimcfg
@@ -164,20 +169,24 @@ YEAR=$(getjobad param_year)
 MASS=$(getjobad param_mass)
 CTAU=$(getjobad param_ctau)
 NEVENTS=$(getjobad param_nevents)
+container=$(getjobad SingularityImage)
 echo "MASS: $MASS"
 echo "CTAU: $CTAU"
 echo "YEAR: $YEAR"
+echo "container: $container"
 
 echo -e "\n--- end header output ---\n" #                       <----- section division
 
 
-gensimcfg="psets/$YEAR/gensim_btophi_cfg.py"
+gridpack="gridpacks/gridpack.tar.gz"
+gensimcfg="psets/$YEAR/gensim_ggphi_cfg.py"
 rawsimcfg="psets/$YEAR/rawsim_cfg.py"
 aodsimcfg="psets/$YEAR/aodsim_cfg.py"
 slimmercfg="psets/$YEAR/slimmer_cfg.py"
 
 setup_chirp
 setup_environment
+
 
 # Make temporary directory to keep original dir clean
 # Go inside and extract the package tarball
@@ -186,11 +195,20 @@ cd temp
 cp ../*.gz .
 tar xf *.gz
 
-edit_psets $IFILE $NEVENTS
+ls -lrth $gridpack
+rm $gridpack
+ls -lrth $gridpack
+xrdcp -f root://redirector.t2.ucsd.edu//store/user/namin/gridpacks/ggphi/ggPhimodified_m${MASS}_slc7_amd64_gcc700_CMSSW_10_6_19_tarball.tar.xz $gridpack
+xrdcp -f root://redirector.t2.ucsd.edu//store/user/namin/gridpacks/ggphi/ggPhimodified_m${MASS}_slc6_amd64_gcc630_CMSSW_9_3_16_tarball.tar.xz $gridpack
+ls -lrth $gridpack
 
-mass=$(echo $MASS | sed 's/p/./')
+seed=$IFILE
+if [[ "$YEAR" == "2018" ]]; then
+    seed=$((IFILE+10000))
+fi
+edit_psets $gridpack $seed $NEVENTS
+
 ctau=$(echo $CTAU | sed 's/p/./')
-sed -i 's/mass = [0-9\.]\+ # TO SED/mass = '"$mass"' # TO SED/' $gensimcfg
 sed -i 's/ctau = [0-9\.]\+ # TO SED/ctau = '"$ctau"' # TO SED/' $gensimcfg
 
 echo "before running: ls -lrth"
@@ -203,11 +221,17 @@ chirp ChirpMetisStatus "before_cmsRun"
 if [[ "$YEAR" == "2017" ]]; then
     CMSSW1=CMSSW_9_3_18
     CMSSW2=CMSSW_9_4_7
-    SCRAM_ARCH=slc6_amd64_gcc630 
+    SCRAM_ARCH=slc6_amd64_gcc630
+    if [[ "$container" == *rhel7* ]]; then
+        SCRAM_ARCH=slc7_amd64_gcc630
+    fi
 elif [[ "$YEAR" == "2018" ]]; then
     CMSSW1=CMSSW_10_2_3
     CMSSW2=CMSSW_10_2_5
     SCRAM_ARCH=slc6_amd64_gcc700 
+    if [[ "$container" == *rhel7* ]]; then
+        SCRAM_ARCH=slc7_amd64_gcc700
+    fi
 else
     echo "YEAR NOT SPECIFIED"
 fi
@@ -216,15 +240,20 @@ echo $CMSSW1
 echo $CMSSW2
 echo $SCRAM_ARCH
 
-
 setup_cmssw $CMSSW1 $SCRAM_ARCH
 cmsRun $gensimcfg
 setup_cmssw $CMSSW2 $SCRAM_ARCH 
 cmsRun $rawsimcfg
 cmsRun $aodsimcfg
-setup_slimmer
-cmsRun $slimmercfg
 CMSRUN_STATUS=$?
+
+if [[ "$container" == *rhel7* ]]; then
+    echo "Not running slimmer because this is slc7. Run it manually."
+else
+    setup_slimmer
+    cmsRun $slimmercfg
+fi
+
 
 chirp ChirpMetisStatus "after_cmsRun"
 
@@ -235,6 +264,11 @@ if [[ $CMSRUN_STATUS != 0 ]]; then
     echo "Removing output file because cmsRun crashed with exit code $?"
     rm ${OUTPUTNAME}.root
     exit 1
+fi
+
+if [[ "$container" == *rhel7* ]]; then
+    echo "Not copying skim file. Need to make it manually. Copying a dummy file instead."
+    echo "make skim manually" > ${OUTPUTNAME}.root
 fi
 
 echo -e "\n--- end running ---\n" #                             <----- section division
@@ -256,6 +290,7 @@ COPY_SRC="file://`pwd`/output_aodsim.root"
 OUTPUTDIRSTORE=$(echo $OUTPUTDIR | sed "s#^/hadoop/cms/store#/store#")
 COPY_DEST="davs://redirector.t2.ucsd.edu:1094${OUTPUTDIRSTORE}/aodsim/output_${IFILE}.root"
 stageout $COPY_SRC $COPY_DEST
+
 
 COPY_SRC="file://`pwd`/${OUTPUTNAME}.root"
 OUTPUTDIRSTORE=$(echo $OUTPUTDIR | sed "s#^/hadoop/cms/store#/store#")

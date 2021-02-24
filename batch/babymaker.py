@@ -65,6 +65,21 @@ def delta_phi(phi1,phi2):
 def delta_r(eta1,eta2,phi1,phi2):
     return math.hypot(eta1-eta2, delta_phi(phi1,phi2))
 
+mask_ranges = [
+    [0.43,0.49],
+    [0.52,0.58],
+    [0.73,0.84],
+    [0.96,1.08],
+    [2.91,3.27],
+    [3.47,3.89],
+    [8.99,9.87],
+    [9.61,10.77],
+    ]
+def pass_mass_mask(mass):
+    for low, high in mask_ranges:
+        if low <= mass <= high:
+            return False
+    return True
 
 def get_filter_eff_info(origch):
     fnames = [f.GetTitle().replace("/output_","/aodsim/output_") for f in origch.GetListOfFiles()]
@@ -158,6 +173,7 @@ def pick_best_objects(dvs, muons, run, is_mc):
     d_imuon_to_idv = {}
     d_imuon_to_pt = {}
     d_idv_to_imuon = {}
+    d_idv_to_charges = {}
     curr_length = 0
     for imuon,muon in enumerate(muons):
         indices = list(muon.vtxIndx())
@@ -169,6 +185,8 @@ def pick_best_objects(dvs, muons, run, is_mc):
         for idx in indices:
             if idx not in d_idv_to_imuon: d_idv_to_imuon[idx] = []
             d_idv_to_imuon[idx].append(imuon)
+            if idx not in d_idv_to_charges: d_idv_to_charges[idx] = []
+            d_idv_to_charges[idx].append(muon.charge())
 
     # Make a mapping of *good* dv indices to max(xError, yError)
     d_goodidv_to_xyerrormax = {}
@@ -178,9 +196,18 @@ def pick_best_objects(dvs, muons, run, is_mc):
         zerror = dv.zError()
         if not dv.passid: continue
         d_goodidv_to_xyerrormax[idv] = max(xerror, yerror)
-    sortedidvs = sorted(d_goodidv_to_xyerrormax.keys(), key=d_goodidv_to_xyerrormax.__getitem__)
+    # sortedidvs = sorted(d_goodidv_to_xyerrormax.keys(), key=d_goodidv_to_xyerrormax.__getitem__)
+    sortedidvs = sorted(d_goodidv_to_xyerrormax.keys(), key=lambda i: dvs[i].chi2())
 
-    # Best DV is one with lowest max(xError, yError)
+    # remove dvs that don't have exactly 2 OS muons associated
+    d_idv_to_isos = dict()
+    for k, v in d_idv_to_charges.items():
+        d_idv_to_isos[k] = (len(v) == 2 and sum(v) == 0)
+    sortedidvs = [idv for idv in sortedidvs if d_idv_to_isos.get(idv,False)]
+
+
+    # Best DV is a DV with ==2 OS muons, 
+    # with lowest chi2 (equivalent to highest prob, because ndof is always 1)
     if len(sortedidvs) > 0: ret["bestidv"] = sortedidvs[0]
 
     # If no DV, return
@@ -205,19 +232,22 @@ def pick_best_objects(dvs, muons, run, is_mc):
         # if >=2 DVs and >=4 muons, store information about subleading DV if its 2 muons
         # are distinct from the leading DV's muons
         if len(sortedidvs) >= 2 and len(muons) >= 4:
-            idv2 = sortedidvs[1]
-            imus = d_idv_to_imuon[idv2]
-            if (len(imus) == 2 and (
-                    (imus[0] != ret["bestimu1"]) and
-                    (imus[0] != ret["bestimu2"]) and
-                    (imus[1] != ret["bestimu1"]) and
-                    (imus[1] != ret["bestimu2"])
-                    )):
-                imu1, imu2 = imus
-                if d_imuon_to_pt[imu2] > d_imuon_to_pt[imu1]:
-                    imu1, imu2 = imu2, imu1
-                ret["secondary"] = dict(bestidv=idv2, bestimu1=imu1, bestimu2=imu2)
+            for idv2 in sortedidvs[1:]:
+                imus = d_idv_to_imuon[idv2]
+                if (len(imus) == 2 and (
+                        (imus[0] != ret["bestimu1"]) and
+                        (imus[0] != ret["bestimu2"]) and
+                        (imus[1] != ret["bestimu1"]) and
+                        (imus[1] != ret["bestimu2"])
+                        )):
+                    imu1, imu2 = imus
+                    if d_imuon_to_pt[imu2] > d_imuon_to_pt[imu1]:
+                        imu1, imu2 = imu2, imu1
+                    ret["secondary"] = dict(bestidv=idv2, bestimu1=imu1, bestimu2=imu2)
+                    break
     return ret
+
+
 
 class PrintableMixin(object):
     def __repr__(self):
@@ -267,17 +297,17 @@ def get_btophi_gen_info(genparts):
         mu1 = d["daughters"][0]
         mu2 = d["daughters"][1]
         if mu2.pt() > mu1.pt(): mu1, mu2 = mu2, mu1
-        out["mu1pt"] = round(mu1.pt(),3)
-        out["mu2pt"] = round(mu2.pt(),3)
-        out["mu1eta"] = round(mu1.eta(),3)
-        out["mu2eta"] = round(mu2.eta(),3)
-        out["phimass"] = round((mu1.p4()+mu2.p4()).mass(),3)
-        out["phipt"] = round((mu1.p4()+mu2.p4()).pt(),3)
-        out["phieta"] = round((mu1.p4()+mu2.p4()).eta(),3)
-        out["bmesonmass"] = round(d["bmeson"].p4().mass(),3)
+        out["mu1pt"] = round(mu1.pt(),4)
+        out["mu2pt"] = round(mu2.pt(),4)
+        out["mu1eta"] = round(mu1.eta(),4)
+        out["mu2eta"] = round(mu2.eta(),4)
+        out["phimass"] = round((mu1.p4()+mu2.p4()).mass(),4)
+        out["phipt"] = round((mu1.p4()+mu2.p4()).pt(),4)
+        out["phieta"] = round((mu1.p4()+mu2.p4()).eta(),4)
+        out["bmesonmass"] = round(d["bmeson"].p4().mass(),4)
         out["bmesonid"] = d["bmeson"].pdgId()
-        out["bmesonpt"] = round(d["bmeson"].pt(),3)
-        out["bmesoneta"] = round(d["bmeson"].eta(),3)
+        out["bmesonpt"] = round(d["bmeson"].pt(),4)
+        out["bmesoneta"] = round(d["bmeson"].eta(),4)
     return out
 
 def get_hzdzd_gen_info(genparts):
@@ -295,11 +325,64 @@ def get_hzdzd_gen_info(genparts):
     nzd = len(d_daughters.keys())
     out = {}
     out["nzd"] = nzd
+    if nzd == 1:
+        d = d_daughters.values()[0]
+        mu1 = d["daughters"][0]
+        mu2 = d["daughters"][1]
+        if mu2.pt() > mu1.pt(): mu1, mu2 = mu2, mu1
+        out["mu1pt"] = round(mu1.pt(),4)
+        out["mu2pt"] = round(mu2.pt(),4)
+        out["mu1eta"] = round(mu1.eta(),4)
+        out["mu2eta"] = round(mu2.eta(),4)
+        out["mu1phi"] = round(mu1.phi(),4)
+        out["mu2phi"] = round(mu2.phi(),4)
+        out["zdpt"] = round((mu1.p4()+mu2.p4()).pt(),4)
+        out["zdeta"] = round((mu1.p4()+mu2.p4()).eta(),4)
+        out["zdphi"] = round((mu1.p4()+mu2.p4()).phi(),4)
+        out["zdmass"] = round((mu1.p4()+mu2.p4()).mass(),4)
+        out["vx"] = round(mu1.vx(),4)
+        out["vy"] = round(mu1.vy(),4)
+        out["vz"] = round(mu1.vz(),4)
+    return out
+
+def get_ggphi_gen_info(genparts):
+    d_daughters = {}
+    for genpart in genparts:
+        pdgid = genpart.pdgId()
+        if abs(pdgid) not in [13,6000211,3000022]: continue
+        motheridx = genpart.motherRef().index()
+        mother = genparts[motheridx]
+        motherid = mother.pdgId()
+        if (motherid == 6000211) and (abs(pdgid)==13): 
+            if motheridx not in d_daughters:
+                d_daughters[motheridx] = {"daughters":[], "mother":None}
+            d_daughters[motheridx]["daughters"].append(genpart)
+    nphi = len(d_daughters.keys())
+    out = {}
+    if nphi == 1:
+        out["nphi"] = nphi
+        d = d_daughters.values()[0]
+        mu1 = d["daughters"][0]
+        mu2 = d["daughters"][1]
+        if mu2.pt() > mu1.pt(): mu1, mu2 = mu2, mu1
+        out["mu1pt"] = round(mu1.pt(),4)
+        out["mu2pt"] = round(mu2.pt(),4)
+        out["mu1eta"] = round(mu1.eta(),4)
+        out["mu2eta"] = round(mu2.eta(),4)
+        out["mu1phi"] = round(mu1.phi(),4)
+        out["mu2phi"] = round(mu2.phi(),4)
+        out["phipt"] = round((mu1.p4()+mu2.p4()).pt(),4)
+        out["phieta"] = round((mu1.p4()+mu2.p4()).eta(),4)
+        out["phiphi"] = round((mu1.p4()+mu2.p4()).phi(),4)
+        out["phimass"] = round((mu1.p4()+mu2.p4()).mass(),4)
+        out["vx"] = round(mu1.vx(),4)
+        out["vy"] = round(mu1.vy(),4)
+        out["vz"] = round(mu1.vz(),4)
     return out
 
 class Looper(object):
 
-    def __init__(self,fnames=[], output="output.root", nevents=-1, expected=-1, treename="Events", year=2018):
+    def __init__(self,fnames=[], output="output.root", nevents=-1, expected=-1, treename="Events", year=2018, fourmu=False):
         if any("*" in x for x in fnames):
             fnames = sum(map(glob.glob,fnames),[])
         self.fnames = map(xrootdify,sum(map(lambda x:x.split(","),fnames),[]))
@@ -315,6 +398,9 @@ class Looper(object):
         self.ch = None
         self.outtree = None
         self.outfile = None
+        self.fourmu = fourmu
+        if self.fourmu:
+            print(">>> Keeping only potentially fourmu events")
 
         if "Run2017" in self.fnames[0]:
             self.year = 2017
@@ -352,6 +438,7 @@ class Looper(object):
 
 
         self.is_hzdzd = any(x in self.fnames[0] for x in ["HToZd", "ZdZd"])
+        self.is_ggphi = any(x in self.fnames[0] for x in ["ggPhi", "ggToPhi"])
         self.is_btophi = any(x in self.fnames[0] for x in ["BToPhi", "BPhi"])
 
         # self.eff_info = dict()
@@ -518,6 +605,8 @@ class Looper(object):
         make_branch("pass_dxyscaled", "b")
         make_branch("pass_dxysig", "b")
         make_branch("pass_all", "b")
+        make_branch("pass_fourmu", "b")
+        make_branch("pass_fourmu_nomask", "b")
         # make_branch("pass_fiducialgen_norho", "b")
         make_branch("pass_genmatch", "b")
 
@@ -632,6 +721,7 @@ class Looper(object):
             make_branch(pfx+"drjet", "f")
             make_branch(pfx+"passid", "b")
             make_branch(pfx+"passiso", "b")
+            make_branch(pfx+"passiso4mu", "b")
             make_branch(pfx+"genMatch_dr", "f") # genMatch branches are for matched gen muons
             make_branch(pfx+"genMatch_pt", "f")
             make_branch(pfx+"genMatch_eta", "f")
@@ -739,6 +829,9 @@ class Looper(object):
         if self.is_hzdzd:
             fh_hzdzd = open(".temp_hzdzd_{}.dat".format(randid), "w")
 
+        if self.is_ggphi:
+            fh_ggphi = open(".temp_ggphi_{}.dat".format(randid), "w")
+
         ievt = 0
         nevents_in = ch.GetEntries()
         print(">>> Started slimming/skimming tree with {} events".format(nevents_in))
@@ -758,18 +851,36 @@ class Looper(object):
 
             ievt += 1
             if self.has_gen_info:
+                run = int(evt.EventAuxiliary.run())
+                lumi = int(evt.EventAuxiliary.luminosityBlock())
+                eventnum = int(evt.EventAuxiliary.event())
                 if self.is_btophi:
                     genparts = list(evt.recoGenParticles_genParticles__HLT.product()) # rawsim
                     # compute some information here before any selections for use later and in a
                     # separate ttree
                     d_btophi_info = get_btophi_gen_info(genparts)
+                    d_btophi_info["event"] = eventnum
+                    d_btophi_info["run"] = run
+                    d_btophi_info["luminosityBlock"] = lumi
                     fh_btophi.write(str(d_btophi_info) + "\n")
                 if self.is_hzdzd:
                     genparts = list(evt.recoGenParticles_genParticles__HLT.product()) # rawsim
                     # compute some information here before any selections for use later and in a
                     # separate ttree
                     d_hzdzd_info = get_hzdzd_gen_info(genparts)
+                    d_hzdzd_info["event"] = eventnum
+                    d_hzdzd_info["run"] = run
+                    d_hzdzd_info["luminosityBlock"] = lumi
                     fh_hzdzd.write(str(d_hzdzd_info) + "\n")
+                if self.is_ggphi:
+                    genparts = list(evt.recoGenParticles_genParticles__HLT.product()) # rawsim
+                    # compute some information here before any selections for use later and in a
+                    # separate ttree
+                    d_ggphi_info = get_ggphi_gen_info(genparts)
+                    d_ggphi_info["event"] = eventnum
+                    d_ggphi_info["run"] = run
+                    d_ggphi_info["luminosityBlock"] = lumi
+                    fh_ggphi.write(str(d_ggphi_info) + "\n")
 
             dvs = evt.ScoutingVertexs_hltScoutingMuonPackerCalo_displacedVtx_HLT.product()
             muons = evt.ScoutingMuons_hltScoutingMuonPackerCalo__HLT.product()
@@ -781,6 +892,10 @@ class Looper(object):
             if len(muons) < 2: continue
             # To verify, one could check bool(evt.bools_triggerMaker_hltresult_SLIM.product()[0])
             # for every event, but I already did that.
+
+            if self.fourmu:
+                if len(dvs) < 2: continue
+                if len(muons) < 4: continue
 
             self.clear_branches()
 
@@ -830,6 +945,9 @@ class Looper(object):
 
             # Get information about best DV and matching 2 muons (in the form of indices)
             info = pick_best_objects(dvs, muons, run, self.is_mc)
+            if self.fourmu:
+                if "secondary" not in info:
+                    continue
 
             # If we don't have a good DV with 2 matched muons, skip the event
             if info["bestidv"] < 0: continue
@@ -842,6 +960,7 @@ class Looper(object):
                 selected_dvs.append(dvs[info["secondary"]["bestidv"]])
                 selected_muons.append(muons[info["secondary"]["bestimu1"]])
                 selected_muons.append(muons[info["secondary"]["bestimu2"]])
+
 
             # Start filling things
 
@@ -1073,8 +1192,10 @@ class Looper(object):
                         # (muon.dxyError() < 0.01)
                         )
                 muon.passiso = ((muon.trackIso() < 0.1) and  (drjet > 0.3))
+                muon.passiso4mu = ((muon.trackIso() < 0.2) and  (drjet > 0.3))
                 branches[pfx+"passid"][0] = muon.passid
                 branches[pfx+"passiso"][0] = muon.passiso
+                branches[pfx+"passiso4mu"][0] = muon.passiso4mu
 
                 # Find closest GenMuon by DeltaR and also embed the info into the muon branches for convenience
                 matched_genmu = None
@@ -1159,6 +1280,7 @@ class Looper(object):
                 mu1p4_corr.SetPtEtaPhiM(mu1.pt(), mu1.eta(), mu1.phi_corr, MUON_MASS)
                 mu2p4_corr.SetPtEtaPhiM(mu2.pt(), mu2.eta(), mu2.phi_corr, MUON_MASS)
                 dimuon_corr = (mu1p4_corr+mu2p4_corr)
+                mass_pair1 = dimuon_corr.M()
 
                 ctau = lxy*cosphi*dimuon_corr.M()/dimuon_corr.Pt()
 
@@ -1171,7 +1293,7 @@ class Looper(object):
                 branches["dimuon_eta"][0] = dimuon_corr.Eta()
                 branches["dimuon_phi"][0] = dimuon_corr.Phi()
                 branches["dimuon_mass"][0] = dimuon_corr.M()
-                branches["mass"][0] = dimuon_corr.M()
+                branches["mass"][0] = mass_pair1
                 branches["dimuon_massRaw"][0] = dimuon.M()
                 branches["absdphimumu"][0] = absdphimumu
                 branches["absdphimudv"][0] = absdphimudv
@@ -1232,7 +1354,8 @@ class Looper(object):
                 branches["pass_baseline_extra_iso"][0] = pass_baseline_iso and pass_extra
                 branches["pass_baseline_extra_isohalf"][0] = pass_baseline_isohalf and pass_extra
 
-                branches["pass_all"][0] = pass_baseline_iso and pass_extra and pass_dxyscaled and pass_dxysig
+                lead_pass_all = pass_baseline_iso and pass_extra and pass_dxyscaled and pass_dxysig
+                branches["pass_all"][0] = lead_pass_all
 
             # Fill some branches for subleading DV and associated muons, if they exist
             if len(selected_dvs) >= 2 and len(selected_muons) >= 4:
@@ -1260,6 +1383,7 @@ class Looper(object):
                 # save nominal 2 muons first
                 orig_dimuon_corr = dimuon_corr
                 dimuon_corr = (mu1p4_corr+mu2p4_corr)
+                mass_pair2 = dimuon_corr.M()
                 ctau = lxy*cosphi*dimuon_corr.M()/dimuon_corr.Pt()
                 fourmuon = (orig_dimuon_corr + dimuon_corr)
 
@@ -1273,7 +1397,7 @@ class Looper(object):
                 branches["sublead_dimuon_eta"][0] = dimuon_corr.Eta()
                 branches["sublead_dimuon_phi"][0] = dimuon_corr.Phi()
                 branches["sublead_dimuon_mass"][0] = dimuon_corr.M()
-                branches["sublead_mass"][0] = dimuon_corr.M()
+                branches["sublead_mass"][0] = mass_pair2
                 branches["sublead_absdphimumu"][0] = absdphimumu
                 branches["sublead_absdphimudv"][0] = absdphimudv
                 branches["sublead_minabsdxy"][0] = min(abs(mu1.dxyCorr),abs(mu2.dxyCorr))
@@ -1287,13 +1411,16 @@ class Looper(object):
                             )
                         )
                 pass_materialveto = (dv.distPixel > 0.05)
+
+                # NOTE loosened wrt 2mu
                 pass_dxyscaled = (
-                        (abs(mu1.dxyCorr/(lxy*dimuon_corr.M()/dimuon_corr.Pt())) > 0.1) and
-                        (abs(mu2.dxyCorr/(lxy*dimuon_corr.M()/dimuon_corr.Pt())) > 0.1)
+                        (abs(mu1.dxyCorr/(lxy*dimuon_corr.M()/dimuon_corr.Pt())) > 0.05) and
+                        (abs(mu2.dxyCorr/(lxy*dimuon_corr.M()/dimuon_corr.Pt())) > 0.05)
                         )
+                # NOTE loosened wrt 2mu
                 pass_dxysig = (
-                        (abs(mu1.dxyCorr/mu1.dxyError()) > 2) and
-                        (abs(mu2.dxyCorr/mu2.dxyError()) > 2)
+                        (abs(mu1.dxyCorr/mu1.dxyError()) > 1) and
+                        (abs(mu2.dxyCorr/mu2.dxyError()) > 1)
                         )
 
                 branches["sublead_pass_genmatch"][0] = ((mu1.genMatch_dr < 0.1) and (mu2.genMatch_dr < 0.1)) or (not self.is_mc)
@@ -1308,21 +1435,41 @@ class Looper(object):
                         and mu1.passid
                         and mu2.passid
                         and (absdphimumu < 2.8)
-                        and (absdphimudv < 0.02)
+                        # NOTE loosened wrt 2mu
+                        and (absdphimudv < 0.1)
                         and dimuon_isos
                         and pass_l1
                         and (lxy < 11.)
                         )
-                pass_baseline_iso = pass_baseline and (mu1.passiso and mu2.passiso)
+                pass_baseline_iso = pass_baseline and (mu1.passiso4mu and mu2.passiso4mu)
                 pass_extra = pass_excesshits and pass_materialveto and (logabsetaphi < 1.25)
 
                 branches["sublead_pass_baseline"][0] = pass_baseline
                 branches["sublead_pass_baseline_iso"][0] = pass_baseline_iso
                 branches["sublead_pass_baseline_extra"][0] = pass_baseline and pass_extra
                 branches["sublead_pass_baseline_extra_iso"][0] = pass_baseline_iso and pass_extra
-                branches["sublead_pass_all"][0] = pass_baseline_iso and pass_extra and pass_dxyscaled and pass_dxysig
+                sublead_pass_all = pass_baseline_iso and pass_extra and pass_dxyscaled and pass_dxysig
+                branches["sublead_pass_all"][0] = sublead_pass_all
 
                 branches["FourMuon_mass"][0] = fourmuon.M()
+
+
+                branches["pass_fourmu"][0] = (
+                    (abs(mass_pair1 - mass_pair2) < 0.05*(mass_pair1 + mass_pair2)/2.)
+                    and pass_mass_mask(mass_pair1) 
+                    and pass_mass_mask(mass_pair2)
+                    and lead_pass_all
+                    and sublead_pass_all
+                    and (115 < fourmuon.M() < 135)
+                    )
+                branches["pass_fourmu_nomask"][0] = (
+                    (abs(mass_pair1 - mass_pair2) < 0.05*(mass_pair1 + mass_pair2)/2.)
+                    # and pass_mass_mask(mass_pair1) 
+                    # and pass_mass_mask(mass_pair2)
+                    and lead_pass_all
+                    and sublead_pass_all
+                    and (115 < fourmuon.M() < 135)
+                    )
 
             self.outtree.Fill()
 
@@ -1362,6 +1509,9 @@ class Looper(object):
             make_branch("BToPhi_bmesonid", "i")
             make_branch("BToPhi_bmesonpt", "f")
             make_branch("BToPhi_bmesoneta", "f")
+            make_branch("BToPhi_run", "l")
+            make_branch("BToPhi_luminosityBlock", "l")
+            make_branch("BToPhi_event", "l")
             with open(".temp_btophi_{}.dat".format(randid), "r") as fh:
                 for line in fh:
                     if not line.strip(): continue
@@ -1382,6 +1532,22 @@ class Looper(object):
                 hzdzdtree.Branch(name, obj, "{}/{}".format(name, tstr.upper()))
                 branches[name] = obj
             make_branch("HZdZd_nzd", "i")
+            make_branch("HZdZd_run", "l")
+            make_branch("HZdZd_luminosityBlock", "l")
+            make_branch("HZdZd_event", "l")
+            make_branch("HZdZd_mu1pt", "f")
+            make_branch("HZdZd_mu2pt", "f")
+            make_branch("HZdZd_mu1eta", "f")
+            make_branch("HZdZd_mu2eta", "f")
+            make_branch("HZdZd_mu1phi", "f")
+            make_branch("HZdZd_mu2phi", "f")
+            make_branch("HZdZd_zdpt", "f")
+            make_branch("HZdZd_zdeta", "f")
+            make_branch("HZdZd_zdphi", "f")
+            make_branch("HZdZd_zdmass", "f")
+            make_branch("HZdZd_vx", "f")
+            make_branch("HZdZd_vy", "f")
+            make_branch("HZdZd_vz", "f")
             with open(".temp_hzdzd_{}.dat".format(randid), "r") as fh:
                 for line in fh:
                     if not line.strip(): continue
@@ -1392,6 +1558,42 @@ class Looper(object):
                         branches["HZdZd_{}".format(k)][0] = v
                     hzdzdtree.Fill()
             hzdzdtree.Write()
+
+        if self.is_ggphi:
+            fh_ggphi.close()
+            ggphitree = r.TTree("ggphitree","")
+            branches = dict()
+            def make_branch(name, tstr):
+                obj = array.array(tstr,[999])
+                ggphitree.Branch(name, obj, "{}/{}".format(name, tstr.upper()))
+                branches[name] = obj
+            make_branch("ggPhi_nphi", "i")
+            make_branch("ggPhi_run", "l")
+            make_branch("ggPhi_luminosityBlock", "l")
+            make_branch("ggPhi_event", "l")
+            make_branch("ggPhi_mu1pt", "f")
+            make_branch("ggPhi_mu2pt", "f")
+            make_branch("ggPhi_mu1eta", "f")
+            make_branch("ggPhi_mu2eta", "f")
+            make_branch("ggPhi_mu1phi", "f")
+            make_branch("ggPhi_mu2phi", "f")
+            make_branch("ggPhi_phipt", "f")
+            make_branch("ggPhi_phieta", "f")
+            make_branch("ggPhi_phiphi", "f")
+            make_branch("ggPhi_phimass", "f")
+            make_branch("ggPhi_vx", "f")
+            make_branch("ggPhi_vy", "f")
+            make_branch("ggPhi_vz", "f")
+            with open(".temp_ggphi_{}.dat".format(randid), "r") as fh:
+                for line in fh:
+                    if not line.strip(): continue
+                    for v in branches.values():
+                        v = 999
+                    d = ast.literal_eval(line)
+                    for k,v in d.items():
+                        branches["ggPhi_{}".format(k)][0] = v
+                    ggphitree.Fill()
+            ggphitree.Write()
 
         self.outfile.Close()
 
@@ -1413,6 +1615,7 @@ if __name__ == "__main__":
     parser.add_argument("-n", "--nevents", help="max number of events to process (-1 = all)", default=-1, type=int)
     parser.add_argument("-e", "--expected", help="expected number of events", default=-1, type=int)
     parser.add_argument("-y", "--year", help="year (2017 or 2018)", default=2018, type=int)
+    parser.add_argument("-t", "--fourmu", help="skip non fourmu events potentially", action="store_true")
     args = parser.parse_args()
 
     looper = Looper(
@@ -1421,5 +1624,6 @@ if __name__ == "__main__":
             nevents=args.nevents,
             expected=args.expected,
             year=args.year,
+            fourmu=args.fourmu,
     )
     looper.run()
