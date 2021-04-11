@@ -198,6 +198,7 @@ tar xf *.gz
 ls -lrth $gridpack
 rm $gridpack
 ls -lrth $gridpack
+# pmass=$(echo $MASS | sed 's/p/./')
 xrdcp -f root://redirector.t2.ucsd.edu//store/user/namin/gridpacks/ggphi/ggPhimodified_m${MASS}_slc7_amd64_gcc700_CMSSW_10_6_19_tarball.tar.xz $gridpack
 xrdcp -f root://redirector.t2.ucsd.edu//store/user/namin/gridpacks/ggphi/ggPhimodified_m${MASS}_slc6_amd64_gcc630_CMSSW_9_3_16_tarball.tar.xz $gridpack
 ls -lrth $gridpack

@@ -2,8 +2,7 @@ import numba
 import numpy as np
 import functools
 import pandas as pd
-import uproot_methods
-import uproot
+import uproot3
 
 def set_plotting_style():
     from matplotlib import rcParams
@@ -128,7 +127,7 @@ def get_chunking(filelist, chunksize, treename="Events", workers=12, skip_bad_fi
     - chunks: triplets of (filename,entrystart,entrystop) calculated with input `chunksize` and `filelist`
     - total_nevents: total event count over `filelist`
     """
-    import uproot
+    import uproot3
     from tqdm.auto import tqdm
     import concurrent.futures
 
@@ -150,9 +149,9 @@ def get_chunking(filelist, chunksize, treename="Events", workers=12, skip_bad_fi
             from dask.distributed import get_client
             client = get_client()
         def numentries(fname):
-            import uproot
+            import uproot3
             try:
-                return (fname,uproot.numentries(fname,treename))
+                return (fname,uproot3.numentries(fname,treename))
             except:
                 return (fname,-1)
         info = client.gather(client.map(numentries, filelist))
@@ -170,7 +169,7 @@ def get_chunking(filelist, chunksize, treename="Events", workers=12, skip_bad_fi
             # slightly slower (serial loop), but can skip bad files
             for fname in tqdm(filelist):
                 try:
-                    items = uproot.numentries(fname, treename, total=False).items()
+                    items = uproot3.numentries(fname, treename, total=False).items()
                 except (IndexError, ValueError) as e:
                     print("Skipping bad file", fname)
                     continue
@@ -180,7 +179,7 @@ def get_chunking(filelist, chunksize, treename="Events", workers=12, skip_bad_fi
                         chunks.append((fn, chunksize*index, min(chunksize*(index+1), nentries)))
         else:
             executor = None if len(filelist) < 5 else concurrent.futures.ThreadPoolExecutor(min(workers, len(filelist)))
-            for fn, nentries in uproot.numentries(filelist, treename, total=False, executor=executor).items():
+            for fn, nentries in uproot3.numentries(filelist, treename, total=False, executor=executor).items():
                 nevents += nentries
                 for index in range(nentries // chunksize + 1):
                     chunks.append((fn, chunksize*index, min(chunksize*(index+1), nentries)))
@@ -239,9 +238,9 @@ def get_geometry_df(fname):
     """
     Get pixel geometry from inputs made in `geometry/`
     """
-    import uproot
+    import uproot3
     import numpy as np
-    f = uproot.open(fname)
+    f = uproot3.open(fname)
     t = f["idToGeo"]
     df = t.pandas.df(branches=["shape","translation","matrix"],flatten=False)
     df["translation_x"] = df["translation"].str[0]
@@ -413,14 +412,16 @@ class LorentzVectorAccessor:
 
     @property
     def mu1(self):
-        LV = uproot_methods.TLorentzVectorArray.from_ptetaphim(
+        import uproot3_methods
+        LV = uproot3_methods.TLorentzVectorArray.from_ptetaphim(
             self._obj["Muon1_pt"],self._obj["Muon1_eta"],self._obj["Muon1_phi"],0.10566,
         )
         return LV
 
     @property
     def mu2(self):
-        LV = uproot_methods.TLorentzVectorArray.from_ptetaphim(
+        import uproot3_methods
+        LV = uproot3_methods.TLorentzVectorArray.from_ptetaphim(
             self._obj["Muon2_pt"],self._obj["Muon2_eta"],self._obj["Muon2_phi"],0.10566,
         )
         return LV
@@ -510,18 +511,18 @@ def make_df(
     """
     import dask.dataframe as dd
     from dask import delayed
-    import uproot
+    import uproot3
     import pandas as pd
     from tqdm.auto import tqdm
     import concurrent.futures
     if isinstance(path, (str, bytes)):
-        paths = uproot.tree._filename_explode(path)
+        paths = uproot3.tree._filename_explode(path)
     else:
-        paths = [y for x in path for y in uproot.tree._filename_explode(x)]
+        paths = [y for x in path for y in uproot3.tree._filename_explode(x)]
 
     if not func:
         def func(fname, entrystart = None, entrystop = None):
-            t = uproot.open(fname)["Events"]
+            t = uproot3.open(fname)["Events"]
             arrs = t.arrays(
                 branches,
                 outputtype = dict,
@@ -590,7 +591,7 @@ def make_df(
 
     return ddf
 
-def dataframe_to_ttree(df, filename, treename="t", chunksize=1e6, compression=uproot.LZ4(1), progress=True):
+def dataframe_to_ttree(df, filename, treename="t", chunksize=1e6, compression=uproot3.LZ4(1), progress=True):
     """
     Writes ROOT file containing one TTree with the input pandas DataFrame.
 
@@ -600,8 +601,8 @@ def dataframe_to_ttree(df, filename, treename="t", chunksize=1e6, compression=up
     compression: uproot compression object (LZ4, ZLIB, LZMA, or None)
     progress: show tqdm progress bar?
     """
-    t = uproot.newtree(df.dtypes)
-    with uproot.recreate(filename, compression=compression) as f:
+    t = uproot3.newtree(df.dtypes)
+    with uproot3.recreate(filename, compression=compression) as f:
         f[treename] = t
         chunksize = int(chunksize)
         iterable = range(0, len(df), chunksize)
@@ -624,7 +625,7 @@ def ttree_to_dataframe(filename, treename="t", branches=None, progress=True, **k
     **kwargs: extra kwargs to pass to `uproot.iterate`
     """
     # entrysteps of None iterates by basket to match `dataframe_to_ttree`
-    iterable = uproot.iterate(filename, treename, branches,
+    iterable = uproot3.iterate(filename, treename, branches,
                               entrysteps=kwargs.pop("entrysteps",None), outputtype=pd.DataFrame,
                               namedecode="ascii", **kwargs
                              )

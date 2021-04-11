@@ -11,16 +11,26 @@ import itertools
 def get_tasks(which):
 
     extra_requirements = "true"
-    slc7ggphi = [2,4,5,10,12,25]
+    slc7ggphi = [2,4,5,10,12,25,40,62.5]
 
     if which == "hzdzd":
+
+        # tag = "v1"
+        # events_per_point = 50000
+        # events_per_job = 500
+        # masses = [0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 8, 10, 15, 25]
+        # ctaus = [1, 10, 100]
+        # years = [2017, 2018]
+        # sname = "zd"
+        # pdname = "HToZdZdTo2Mu2X"
 
         tag = "v1"
         events_per_point = 50000
         events_per_job = 500
-        masses = [0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 8, 10, 15, 25]
-        ctaus = [1, 10, 100]
-        years = [2017, 2018]
+        masses = [35,50]
+        ctaus = [1, 10, 100, 1000]
+        # years = [2017, 2018]
+        years = [2018]
         sname = "zd"
         pdname = "HToZdZdTo2Mu2X"
 
@@ -38,12 +48,23 @@ def get_tasks(which):
     elif which == "ggphi":
 
 
+        # tag = "v1"
+        # events_per_point = 50000
+        # events_per_job = 500
+        # masses = [2, 3, 4, 5, 8, 10, 12, 15, 25]
+        # ctaus = [1, 10, 100]
+        # years = [2017, 2018]
+        # sname = "phi"
+        # pdname = "ggPhi"
+
         tag = "v1"
         events_per_point = 50000
         events_per_job = 500
-        masses = [2, 3, 4, 5, 8, 10, 12, 15, 25]
+        # masses = [40, 62.5]
+        masses = [62.5]
         ctaus = [1, 10, 100]
-        years = [2017, 2018]
+        # years = [2017, 2018]
+        years = [2018]
         sname = "phi"
         pdname = "ggPhi"
 

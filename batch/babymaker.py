@@ -301,13 +301,19 @@ def get_btophi_gen_info(genparts):
         out["mu2pt"] = round(mu2.pt(),4)
         out["mu1eta"] = round(mu1.eta(),4)
         out["mu2eta"] = round(mu2.eta(),4)
+        out["mu1phi"] = round(mu1.phi(),4)
+        out["mu2phi"] = round(mu2.phi(),4)
         out["phimass"] = round((mu1.p4()+mu2.p4()).mass(),4)
         out["phipt"] = round((mu1.p4()+mu2.p4()).pt(),4)
         out["phieta"] = round((mu1.p4()+mu2.p4()).eta(),4)
+        out["phiphi"] = round((mu1.p4()+mu2.p4()).phi(),4)
         out["bmesonmass"] = round(d["bmeson"].p4().mass(),4)
         out["bmesonid"] = d["bmeson"].pdgId()
         out["bmesonpt"] = round(d["bmeson"].pt(),4)
         out["bmesoneta"] = round(d["bmeson"].eta(),4)
+        out["vx"] = round(mu1.vx(),4)
+        out["vy"] = round(mu1.vy(),4)
+        out["vz"] = round(mu1.vz(),4)
     return out
 
 def get_hzdzd_gen_info(genparts):
@@ -1502,9 +1508,12 @@ class Looper(object):
             make_branch("BToPhi_mu2pt", "f")
             make_branch("BToPhi_mu1eta", "f")
             make_branch("BToPhi_mu2eta", "f")
+            make_branch("BToPhi_mu1phi", "f")
+            make_branch("BToPhi_mu2phi", "f")
             make_branch("BToPhi_phimass", "f")
             make_branch("BToPhi_phipt", "f")
             make_branch("BToPhi_phieta", "f")
+            make_branch("BToPhi_phiphi", "f")
             make_branch("BToPhi_bmesonmass", "f")
             make_branch("BToPhi_bmesonid", "i")
             make_branch("BToPhi_bmesonpt", "f")
@@ -1512,6 +1521,9 @@ class Looper(object):
             make_branch("BToPhi_run", "l")
             make_branch("BToPhi_luminosityBlock", "l")
             make_branch("BToPhi_event", "l")
+            make_branch("BToPhi_vx", "f")
+            make_branch("BToPhi_vy", "f")
+            make_branch("BToPhi_vz", "f")
             with open(".temp_btophi_{}.dat".format(randid), "r") as fh:
                 for line in fh:
                     if not line.strip(): continue
