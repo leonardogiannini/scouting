@@ -16,10 +16,14 @@ namespace {
 
 }
 
-HitMaker::HitMaker(const edm::ParameterSet& iConfig)
+HitMaker::HitMaker(const edm::ParameterSet& iConfig):
+magFieldToken_(esConsumes()),
+trackingGeometryToken_(esConsumes()),
+measurementTrackerToken_(esConsumes()),
+propagatorToken_(esConsumes(edm::ESInputTag("", "PropagatorWithMaterial")))
 {
-    muonToken_ = consumes<ScoutingMuonCollection>(iConfig.getParameter<InputTag>("muonInputTag"));
-    dvToken_ = consumes<ScoutingVertexCollection>(iConfig.getParameter<InputTag>("dvInputTag"));
+    muonToken_ = consumes<Run3ScoutingMuonCollection>(iConfig.getParameter<InputTag>("muonInputTag"));
+    dvToken_ = consumes<Run3ScoutingVertexCollection>(iConfig.getParameter<InputTag>("dvInputTag"));
     measurementTrackerEventToken_ = consumes<MeasurementTrackerEvent>(iConfig.getParameter<InputTag>("measurementTrackerEventInputTag"));
 
     produces<vector<vector<bool> > >("isbarrel").setBranchAlias("Muon_hit_barrel");
@@ -45,15 +49,31 @@ void HitMaker::beginJob(){}
 void HitMaker::endJob(){}
 
 void HitMaker::beginRun(const edm::Run& iRun, const edm::EventSetup& iSetup){
-    iSetup.get<TrackingComponentsRecord>().get("PropagatorWithMaterial", propagatorHandle_);
-    iSetup.get<GlobalTrackingGeometryRecord>().get(theGeo_);
-    iSetup.get<IdealMagneticFieldRecord>().get(magfield_);
-    iSetup.get<CkfComponentsRecord>().get("", measurementTracker_);
+    
+    //propagatorToken_ = esConsumes<Propagator, TrackingComponentsRecord>(edm::ESInputTag("", "PropagatorWithMaterial"));
+    //propagatorHandle_ = iSetup.getHandle(propagatorToken_);
+    
+    //iSetup.get<TrackingComponentsRecord>().get("PropagatorWithMaterial", propagatorHandle_);
+    //iSetup.get<GlobalTrackingGeometryRecord>().get(theGeo_);
+    //iSetup.get<IdealMagneticFieldRecord>().get("",magfield_);
+    //iSetup.get<CkfComponentsRecord>().get("", measurementTracker_);
+
+    //magFieldToken_=esConsumes<MagneticField, IdealMagneticFieldRecord>(edm::ESInputTag("", ""));
+    //trackingGeometryToken_=esConsumes<GlobalTrackingGeometry, GlobalTrackingGeometryRecord>(edm::ESInputTag("", ""));
+
+//    magfield_ = iSetup.getHandle(magFieldToken_);
+//    theGeo_ = iSetup.getHandle(trackingGeometryToken_);
+//    measurementTracker_ = iSetup.getHandle(measurementTrackerToken_);
+     
 }
 
 void HitMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
 
     bool debug = false;
+    propagatorHandle_ = iSetup.getHandle(propagatorToken_);
+    magfield_ = iSetup.getHandle(magFieldToken_);
+    theGeo_ = iSetup.getHandle(trackingGeometryToken_);
+    measurementTracker_ = iSetup.getHandle(measurementTrackerToken_);
 
     auto const& searchGeom = *(*measurementTracker_).geometricSearchTracker();
     auto const& prop = *propagatorHandle_;
@@ -61,10 +81,10 @@ void HitMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
     edm::Handle<MeasurementTrackerEvent> measurementTrackerEvent;
     iEvent.getByToken(measurementTrackerEventToken_, measurementTrackerEvent);
 
-    edm::Handle<ScoutingMuonCollection> muonHandle;
+    edm::Handle<Run3ScoutingMuonCollection> muonHandle;
     iEvent.getByToken(muonToken_, muonHandle);
 
-    edm::Handle<ScoutingVertexCollection> dvHandle;
+    edm::Handle<Run3ScoutingVertexCollection> dvHandle;
     iEvent.getByToken(dvToken_, dvHandle);
 
     if (debug) {
@@ -102,7 +122,7 @@ void HitMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
         float dv_y = 0;
         float dv_z = 0;
         if (first_good_index < nDV) {
-            ScoutingVertex dv = (*dvHandle).at(first_good_index);
+            Run3ScoutingVertex dv = (*dvHandle).at(first_good_index);
             dv_x = dv.x();
             dv_y = dv.y();
             dv_z = dv.z();
@@ -114,14 +134,14 @@ void HitMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
         float track_py = lv.Py();
         float track_pz = lv.Pz();
         float track_phi = muon.trk_phi();
-        float track_dz = muon.dz();
-        float track_dxy = muon.dxy();
+        float track_dz = muon.trk_dz();
+        float track_dxy = muon.trk_dxy();
         float track_dsz = muon.trk_dsz();
         float track_lambda = muon.trk_lambda();
         float track_qoverpError = muon.trk_qoverpError();
         float track_lambdaError = muon.trk_lambdaError();
         float track_phiError = muon.trk_phiError();
-        float track_dxyError = muon.dxyError();
+        float track_dxyError = muon.trk_dxyError();
         float track_dszError = muon.trk_dszError();
         int track_charge = muon.charge();
         int nvalidpixelhits = muon.nValidPixelHits();

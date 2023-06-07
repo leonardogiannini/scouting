@@ -23,6 +23,9 @@ void BeamSpotMaker::beginJob(){}
 void BeamSpotMaker::endJob(){}
 
 void BeamSpotMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
+  
+  std::cout << "beamsport maker" << std::endl;
+  
   unique_ptr<float> x(new float);
   unique_ptr<float> y(new float);
   unique_ptr<float> z(new float);

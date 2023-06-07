@@ -38,7 +38,7 @@ TriggerMaker::TriggerMaker(const edm::ParameterSet& iConfig) :
 
   produces<std::vector<std::string> >("l1name").setBranchAlias("l1_name");
   produces<std::vector<bool> >("l1result").setBranchAlias("l1_result");
-  produces<std::vector<int> >("l1prescale").setBranchAlias("l1_prescale");
+  produces<std::vector<double> >("l1prescale").setBranchAlias("l1_prescale");
 
   produces<std::vector<std::string> >("hltname").setBranchAlias("hlt_name");
   produces<std::vector<bool> >("hltresult").setBranchAlias("hlt_result");
@@ -57,7 +57,7 @@ void TriggerMaker::beginRun(const edm::Run& iRun, const edm::EventSetup& iSetup)
 void TriggerMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
   unique_ptr<vector<string> > l1_name(new vector<string>);
   unique_ptr<vector<bool> > l1_result(new vector<bool>);
-  unique_ptr<vector<int> > l1_prescale(new vector<int>);
+  unique_ptr<vector<double> > l1_prescale(new vector<double>);
 
   unique_ptr<vector<string> > hlt_name(new vector<string>);
   unique_ptr<vector<bool> > hlt_result(new vector<bool>);
@@ -75,12 +75,13 @@ void TriggerMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
       trigAlias++;
     }
   }
+  std::cout << "here" <<std::endl;
 
   if (doL1_){
     l1GtUtils_->retrieveL1(iEvent, iSetup, algToken_);
     for (auto const& l1seed:l1Seeds_){
       bool l1htbit = 0;
-      int prescale = -1;
+      double prescale = -1;
       l1GtUtils_->getFinalDecisionByName(l1seed, l1htbit);
       l1GtUtils_->getPrescaleByName(l1seed, prescale);
       l1_result->push_back(l1htbit);
@@ -89,6 +90,7 @@ void TriggerMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
     }
   }
 
+  std::cout << "after L1" <<std::endl;
   unique_ptr<std::vector<int> > trigObjsid(new std::vector<int>);
   unique_ptr<std::vector<float > > trigObjspt(new std::vector<float>);
   unique_ptr<std::vector<float > > trigObjseta(new std::vector<float>);
@@ -185,7 +187,8 @@ void TriggerMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
   iEvent.put(std::move(l1_prescale), "l1prescale");
   iEvent.put(std::move(hlt_name), "hltname");
   iEvent.put(std::move(hlt_result), "hltresult");
-
+  std::cout << "after tog" <<std::endl;
+   
   if (doTriggerObjects_) {
       iEvent.put(std::move(trigObjsfilters),"trigObjsfilters");
       iEvent.put(std::move(trigObjsid),"trigObjsid");
@@ -195,6 +198,8 @@ void TriggerMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
       iEvent.put(std::move(trigObjsmass),"trigObjsmass");
       iEvent.put(std::move(trigObjspassLast),"trigObjspassLast");
   }
+  
+  std::cout << "end" <<std::endl;
 
 }
 
