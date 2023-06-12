@@ -18,7 +18,7 @@ TriggerMaker::TriggerMaker(const edm::ParameterSet& iConfig) :
   if (doL1_){
     algToken_ = consumes<BXVector<GlobalAlgBlk>>(iConfig.getParameter<InputTag>("AlgInputTag"));
     l1Seeds_ = iConfig.getParameter<std::vector<std::string> >("l1Seeds");
-    l1GtUtils_ = std::make_shared<l1t::L1TGlobalUtil>(iConfig, consumesCollector());
+    l1GtUtils_ = std::make_shared<l1t::L1TGlobalUtil>(iConfig, consumesCollector(), l1t::UseEventSetupIn::RunAndEvent);
   }
 
   if (doTriggerObjects_) {
