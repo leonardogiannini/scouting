@@ -82,15 +82,6 @@ private:
   edm::ESHandle<Propagator> propagatorHandle_;
   edm::ESGetToken<Propagator, TrackingComponentsRecord> propagatorToken_;
 
-  //  edm::EDGetToken muonToken_;
-  //    edm::EDGetToken dvToken_;
-  //      edm::EDGetToken measurementTrackerEventToken_;
-  //
-  //        edm::ESHandle<MeasurementTracker> measurementTracker_;
-  //          edm::ESHandle<MagneticField> magfield_;
-  //            edm::ESHandle<GlobalTrackingGeometry> theGeo_;
-  //              edm::ESHandle<Propagator> propagatorHandle_;
-
 };
 
 #endif

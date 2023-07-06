@@ -48,28 +48,12 @@ void HitMaker::beginJob(){}
 
 void HitMaker::endJob(){}
 
-void HitMaker::beginRun(const edm::Run& iRun, const edm::EventSetup& iSetup){
-    
-    //propagatorToken_ = esConsumes<Propagator, TrackingComponentsRecord>(edm::ESInputTag("", "PropagatorWithMaterial"));
-    //propagatorHandle_ = iSetup.getHandle(propagatorToken_);
-    
-    //iSetup.get<TrackingComponentsRecord>().get("PropagatorWithMaterial", propagatorHandle_);
-    //iSetup.get<GlobalTrackingGeometryRecord>().get(theGeo_);
-    //iSetup.get<IdealMagneticFieldRecord>().get("",magfield_);
-    //iSetup.get<CkfComponentsRecord>().get("", measurementTracker_);
-
-    //magFieldToken_=esConsumes<MagneticField, IdealMagneticFieldRecord>(edm::ESInputTag("", ""));
-    //trackingGeometryToken_=esConsumes<GlobalTrackingGeometry, GlobalTrackingGeometryRecord>(edm::ESInputTag("", ""));
-
-//    magfield_ = iSetup.getHandle(magFieldToken_);
-//    theGeo_ = iSetup.getHandle(trackingGeometryToken_);
-//    measurementTracker_ = iSetup.getHandle(measurementTrackerToken_);
-     
-}
+void HitMaker::beginRun(const edm::Run& iRun, const edm::EventSetup& iSetup){}
 
 void HitMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
 
     bool debug = false;
+
     propagatorHandle_ = iSetup.getHandle(propagatorToken_);
     magfield_ = iSetup.getHandle(magFieldToken_);
     theGeo_ = iSetup.getHandle(trackingGeometryToken_);
@@ -239,6 +223,9 @@ void HitMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
             }
             // https://github.com/cms-sw/cmssw/blob/949a7b9d2c1bfde1458e01da1c14da0cd53a0ccf/HLTriggerOffline/Muon/src/PropagateToMuon.cc#L159
             // https://github.com/cms-sw/cmssw/blob/c9b012f3388a39f64eb05980e3732d0484539f14/DataFormats/GeometrySurface/interface/Cylinder.h
+            double valid_distance = prop.propagateWithPath(startingStateP, Cylinder(dv_rho)).second;
+            //very seldom (1/500000 probably) the propagation seems to give seg faults - since this is very rare I just check the distance
+            if(valid_distance<=0) continue;
             startingStateP = prop.propagate(startingStateP, Cylinder(dv_rho));
             // cylx = startingStateP.globalPosition().x();
             // cyly = startingStateP.globalPosition().y();
@@ -255,13 +242,11 @@ void HitMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
         float pyatdv = startingStateP.globalMomentum().y();
         float pzatdv = startingStateP.globalMomentum().z();
 
-
         // or could get searchGeom.allLayers() and require layer->subDetector() enum is PixelBarrel/PixelEndcap 
         vector<DetLayer const*> layers_pixel;
         for (auto layer : searchGeom.pixelBarrelLayers()) layers_pixel.push_back(layer);
         for (auto layer : searchGeom.negPixelForwardLayers()) layers_pixel.push_back(layer);
         for (auto layer : searchGeom.posPixelForwardLayers()) layers_pixel.push_back(layer);
-
         vector<bool> isbarrel;
         vector<bool> isactive;
         vector<int> layernum;

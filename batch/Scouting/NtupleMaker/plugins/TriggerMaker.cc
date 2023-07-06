@@ -75,7 +75,6 @@ void TriggerMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
       trigAlias++;
     }
   }
-  std::cout << "here" <<std::endl;
 
   if (doL1_){
     l1GtUtils_->retrieveL1(iEvent, iSetup, algToken_);
@@ -90,7 +89,6 @@ void TriggerMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
     }
   }
 
-  std::cout << "after L1" <<std::endl;
   unique_ptr<std::vector<int> > trigObjsid(new std::vector<int>);
   unique_ptr<std::vector<float > > trigObjspt(new std::vector<float>);
   unique_ptr<std::vector<float > > trigObjseta(new std::vector<float>);
@@ -115,13 +113,14 @@ void TriggerMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
       int itrig = -1;
       for(unsigned int i = 0; i < nTriggers; ++i){
           const string& name = triggerNames_.triggerName(i);
-          if (name.find("DST_DoubleMu3_noVtx_CaloScouting_v") != std::string::npos) {
+          //should check this part further
+          if (name.find("DST_Run3_PFScoutingPixelTracking_") != std::string::npos) {
               itrig = i;
               break;
           }
       }
       if (itrig < 0) {
-          throw cms::Exception("TriggerMaker::produce: Couldn't find DST_DoubleMu3_noVtx_CaloScouting_v in the list of triggers");
+          throw cms::Exception("TriggerMaker::produce: Couldn't find DST_DoubleMu3_noVtx_CaloScouting_v in the list of triggers"); // this is the old name
       }
 
       pat::TriggerObjectStandAlone TO;
@@ -187,7 +186,6 @@ void TriggerMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
   iEvent.put(std::move(l1_prescale), "l1prescale");
   iEvent.put(std::move(hlt_name), "hltname");
   iEvent.put(std::move(hlt_result), "hltresult");
-  std::cout << "after tog" <<std::endl;
    
   if (doTriggerObjects_) {
       iEvent.put(std::move(trigObjsfilters),"trigObjsfilters");
@@ -198,8 +196,6 @@ void TriggerMaker::produce(edm::Event& iEvent, const edm::EventSetup& iSetup){
       iEvent.put(std::move(trigObjsmass),"trigObjsmass");
       iEvent.put(std::move(trigObjspassLast),"trigObjspassLast");
   }
-  
-  std::cout << "end" <<std::endl;
 
 }
 
